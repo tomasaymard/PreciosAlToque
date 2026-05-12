@@ -50,6 +50,19 @@ export const BUSINESSES: Business[] = [
   { id: 'N004', name: "Almacén de Doña Rosa", coords: { lat: -34.615, lon: -58.43 }, address: "Pasaje Sarmiento 12" }
 ];
 
+// Productos sembrados para el primer arranque — se usan tanto como estado inicial
+// (para que la búsqueda funcione desde el render 0) como fallback si AsyncStorage falla.
+// Esto es temporal: en la Fase 2 se reemplaza por datos reales desde Supabase.
+const INITIAL_PRODUCTS: Product[] = [
+  { business_id: 'N001', product: "banana", price: 1500, unit: "el kilo", updated: "Hace 1h" },
+  { business_id: 'N001', product: "manzana", price: 1800, unit: "el kilo", updated: "Hace 1h" },
+  { business_id: 'N002', product: "leche", price: 950, unit: "el litro", updated: "Hace 2h" },
+  { business_id: 'N002', product: "arroz", price: 2300, unit: "el kilo", updated: "Hace 2h" },
+  { business_id: 'N003', product: "pan", price: 2100, unit: "el kilo", updated: "Hace 30m" },
+  { business_id: 'N004', product: "leche", price: 1050, unit: "el litro", updated: "Hace 4h" },
+  { business_id: 'N004', product: "pan", price: 1900, unit: "el kilo", updated: "Hace 4h" }
+];
+
 const VALID_CREDENTIALS: { [key: string]: string } = {
   "pepe_don": "12345",
   "super_chino": "67890"
@@ -65,7 +78,9 @@ interface AppProviderProps {
 }
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>([]);
+  // Iniciamos products con los datos sembrados para que la primera búsqueda
+  // siempre funcione, incluso si AsyncStorage tarda o falla.
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
@@ -82,19 +97,19 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     try {
       const storedProducts = await AsyncStorage.getItem('priceProducts');
       if (storedProducts) {
-        setProducts(JSON.parse(storedProducts));
+        const parsed = JSON.parse(storedProducts) as Product[];
+        // Solo sobrescribimos el estado si lo guardado tiene contenido válido.
+        // Si está vacío o corrupto, dejamos los INITIAL_PRODUCTS que ya están en el estado.
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProducts(parsed);
+        }
       } else {
-        // Datos iniciales de prueba
-        const initialProducts: Product[] = [
-          { business_id: 'N001', product: "banana", price: 1500, unit: "el kilo", updated: "Hace 1h" },
-          { business_id: 'N002', product: "leche", price: 950, unit: "el litro", updated: "Hace 2h" },
-          { business_id: 'N003', product: "pan", price: 2100, unit: "el kilo", updated: "Hace 30m" }
-        ];
-        await AsyncStorage.setItem('priceProducts', JSON.stringify(initialProducts));
-        setProducts(initialProducts);
+        // Primera vez: persistimos los datos sembrados a AsyncStorage.
+        await AsyncStorage.setItem('priceProducts', JSON.stringify(INITIAL_PRODUCTS));
       }
     } catch (error) {
       console.error('Error loading products:', error);
+      // Si AsyncStorage falla, los INITIAL_PRODUCTS ya están en el estado, así que la app sigue usable.
     }
   };
 

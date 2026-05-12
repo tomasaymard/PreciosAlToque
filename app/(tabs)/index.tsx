@@ -43,9 +43,9 @@ export default function HomeScreen() {
     <ScrollView style={styles.container}>
       {/* Header */}
       <ThemedView style={styles.header}>
-        <ThemedText style={styles.headerTitle}>🛒 Precios Justos Barriales</ThemedText>
+        <ThemedText style={styles.headerTitle}>🛒 Precios al Toque</ThemedText>
         <ThemedText style={styles.headerSubtitle}>
-          Encuentra el mejor precio para tus compras. ¡Tu herramienta contra la inflación!
+          Encontrá el mejor precio cerca tuyo. Tu herramienta contra la inflación.
         </ThemedText>
       </ThemedView>
 
@@ -116,7 +116,7 @@ export default function HomeScreen() {
       {/* Footer */}
       <ThemedView style={styles.footer}>
         <ThemedText style={styles.footerText}>
-          © 2025 Proyecto Comunitario. Datos cargados por vecinos.
+          © 2026 Precios al Toque. Datos cargados por vecinos y comercios.
         </ThemedText>
         <Link href="/login" style={styles.loginLink}>
           <ThemedText style={styles.loginLinkText}>Acceso Negocios</ThemedText>
