@@ -1,46 +1,71 @@
 import React, { useState } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Link } from 'expo-router';
-import { useApp, BUSINESSES } from '@/contexts/AppContext';
+import { useApp, PriceWithBusiness } from '@/contexts/AppContext';
 
-interface ProductCardProps {
-  product: any;
-  business: any;
+interface PriceCardProps {
+  item: PriceWithBusiness;
   isBestPrice: boolean;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, business, isBestPrice }) => (
+function formatUpdatedAt(iso: string): string {
+  const date = new Date(iso);
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Hace instantes';
+  if (diffMin < 60) return `Hace ${diffMin} min`;
+  const diffHs = Math.floor(diffMin / 60);
+  if (diffHs < 24) return `Hace ${diffHs} h`;
+  const diffDays = Math.floor(diffHs / 24);
+  if (diffDays < 30) return `Hace ${diffDays} d`;
+  return date.toLocaleDateString('es-AR');
+}
+
+const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice }) => (
   <ThemedView style={[styles.storeCard, isBestPrice && styles.bestPrice]}>
     <ThemedView style={styles.namePrice}>
-      <ThemedText style={styles.storeName}>{business?.name || 'Negocio Desconocido'}</ThemedText>
-      <ThemedText style={styles.price}>${product.price.toLocaleString('es-AR')} {product.unit}</ThemedText>
+      <ThemedText style={styles.storeName}>{item.business.name}</ThemedText>
+      <ThemedText style={styles.price}>${item.price.toLocaleString('es-AR')} {item.unit}</ThemedText>
     </ThemedView>
     <ThemedView style={styles.meta}>
-      <ThemedText style={styles.address}>{business?.address || 'N/A'}</ThemedText>
-      <ThemedText style={styles.updatedTime}>Actualizado: {product.updated}</ThemedText>
+      <ThemedText style={styles.address}>{item.business.address || 'Sin dirección'}</ThemedText>
+      <ThemedText style={styles.updatedTime}>Actualizado: {formatUpdatedAt(item.updated_at)}</ThemedText>
     </ThemedView>
   </ThemedView>
 );
 
 export default function HomeScreen() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const { searchProducts } = useApp();
+  const [results, setResults] = useState<PriceWithBusiness[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const { searchPrices, refresh, loading } = useApp();
 
-  const searchPrices = () => {
+  const handleSearch = () => {
     if (!searchTerm.trim()) {
-      Alert.alert('Error', 'Por favor ingresa un producto para buscar');
+      Alert.alert('Atención', 'Por favor ingresá un producto para buscar.');
       return;
     }
-
-    const searchResults = searchProducts(searchTerm);
+    const searchResults = searchPrices(searchTerm);
     setResults(searchResults);
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    // Si había una búsqueda activa, la repetimos con los datos frescos
+    if (searchTerm.trim()) {
+      setResults(searchPrices(searchTerm));
+    }
+    setRefreshing(false);
+  };
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+    >
       {/* Header */}
       <ThemedView style={styles.header}>
         <ThemedText style={styles.headerTitle}>🛒 Precios al Toque</ThemedText>
@@ -57,8 +82,10 @@ export default function HomeScreen() {
           value={searchTerm}
           onChangeText={setSearchTerm}
           placeholderTextColor="#666"
+          returnKeyType="search"
+          onSubmitEditing={handleSearch}
         />
-        <TouchableOpacity style={styles.searchButton} onPress={searchPrices}>
+        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
           <ThemedText style={styles.searchButtonText}>Buscar Precios</ThemedText>
         </TouchableOpacity>
       </ThemedView>
@@ -68,20 +95,20 @@ export default function HomeScreen() {
         <ThemedText style={styles.resultsTitle}>
           Resultados para: <ThemedText style={styles.searchTermDisplay}>{searchTerm.toUpperCase()}</ThemedText>
         </ThemedText>
-        
-        {results.length > 0 ? (
+
+        {loading ? (
+          <ThemedView style={styles.placeholder}>
+            <ThemedText style={styles.placeholderText}>Cargando precios...</ThemedText>
+          </ThemedView>
+        ) : results.length > 0 ? (
           <ThemedView style={styles.priceResults}>
-            {results.map((product, index) => {
-              const business = BUSINESSES.find(b => b.id === product.business_id);
-              return (
-                <ProductCard
-                  key={`${product.business_id}-${product.product}`}
-                  product={product}
-                  business={business}
-                  isBestPrice={index === 0}
-                />
-              );
-            })}
+            {results.map((item, index) => (
+              <PriceCard
+                key={item.id}
+                item={item}
+                isBestPrice={index === 0}
+              />
+            ))}
           </ThemedView>
         ) : searchTerm ? (
           <ThemedView style={styles.placeholder}>
@@ -92,7 +119,7 @@ export default function HomeScreen() {
         ) : (
           <ThemedView style={styles.placeholder}>
             <ThemedText style={styles.placeholderText}>
-              Ingresa un producto y presiona Buscar.
+              Ingresá un producto y tocá Buscar. Deslizá hacia abajo para actualizar.
             </ThemedText>
           </ThemedView>
         )}

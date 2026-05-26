@@ -4,132 +4,133 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
-import { useApp, Product } from '@/contexts/AppContext';
+import { useApp, Price } from '@/contexts/AppContext';
 
 export default function AdminScreen() {
   const [productName, setProductName] = useState('');
   const [productPrice, setProductPrice] = useState('');
   const [productUnit, setProductUnit] = useState('el kilo');
   const [isLoading, setIsLoading] = useState(false);
-  
-  const { 
-    isLoggedIn, 
-    currentUser, 
-    products, 
-    addProduct, 
-    updateProduct, 
-    deleteProduct, 
-    logout 
+
+  const {
+    session,
+    authUser,
+    myBusiness,
+    prices,
+    upsertPrice,
+    deletePrice,
+    signOut,
+    loading,
   } = useApp();
 
   useEffect(() => {
-    if (!isLoggedIn || !currentUser) {
+    // Si no está logueado, mandamos al login
+    if (!loading && !session) {
       router.replace('/login');
     }
-  }, [isLoggedIn, currentUser]);
+  }, [session, loading]);
 
-  // Obtener productos del negocio actual
-  const myProducts = products.filter(p => p.business_id === currentUser?.business.id);
+  // Precios cargados por el comercio del usuario actual
+  const myPrices = myBusiness
+    ? prices.filter((p) => p.business_id === myBusiness.id)
+    : [];
 
   const handleSubmit = async () => {
     if (!productName.trim() || !productPrice.trim()) {
-      Alert.alert('Error', 'Por favor complete todos los campos');
+      Alert.alert('Atención', 'Completá nombre del producto y precio.');
       return;
     }
 
-    const price = parseInt(productPrice);
+    const price = parseFloat(productPrice.replace(',', '.'));
     if (isNaN(price) || price <= 0) {
-      Alert.alert('Error', 'Por favor ingrese un precio válido');
+      Alert.alert('Atención', 'Ingresá un precio válido (número mayor a 0).');
+      return;
+    }
+
+    if (!myBusiness) {
+      Alert.alert(
+        'Error',
+        'No encontramos un comercio asociado a tu cuenta. Cerrá sesión y registrate de nuevo.'
+      );
       return;
     }
 
     setIsLoading(true);
-
     try {
-      // Crear nuevo producto
-      const newProduct: Product = {
-        business_id: currentUser!.business.id,
-        product: productName.toLowerCase().trim(),
-        price: price,
-        unit: productUnit,
-        updated: new Date().toLocaleTimeString('es-AR')
-      };
-
-      // Verificar si ya existe y actualizar, o agregar nuevo
-      const existingProduct = products.find(p => 
-        p.business_id === currentUser!.business.id && 
-        p.product === newProduct.product
-      );
-
-      if (existingProduct) {
-        await updateProduct(newProduct);
-      } else {
-        await addProduct(newProduct);
-      }
-      
-      // Limpiar formulario
+      await upsertPrice(productName, price, productUnit);
       setProductName('');
       setProductPrice('');
       setProductUnit('el kilo');
-      
-      Alert.alert('Éxito', '✅ Precio cargado o actualizado con éxito.');
-    } catch (error) {
-      console.error('Error saving product:', error);
-      Alert.alert('Error', 'Error al guardar el producto');
+      Alert.alert('Listo', 'Precio cargado o actualizado con éxito.');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'No se pudo guardar el precio.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDeleteProduct = async (productToDelete: Product) => {
+  const handleDeletePrice = async (priceToDelete: Price) => {
     Alert.alert(
       'Confirmar eliminación',
-      `¿Está seguro que desea eliminar "${productToDelete.product}"?`,
+      `¿Seguro que querés eliminar "${priceToDelete.product_name}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
+        {
+          text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteProduct(productToDelete.business_id, productToDelete.product);
-              Alert.alert('Éxito', 'Producto eliminado correctamente');
-            } catch (error) {
-              console.error('Error deleting product:', error);
-              Alert.alert('Error', 'Error al eliminar el producto');
+              await deletePrice(priceToDelete.id);
+              Alert.alert('Listo', 'Precio eliminado.');
+            } catch (error: any) {
+              Alert.alert('Error', error?.message || 'No se pudo eliminar.');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Está seguro que desea cerrar la sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Cerrar Sesión',
-          onPress: async () => {
-            try {
-              await logout();
-              router.replace('/login');
-            } catch (error) {
-              console.error('Error logging out:', error);
-            }
-          }
-        }
-      ]
-    );
+  const handleLogout = () => {
+    Alert.alert('Cerrar sesión', '¿Querés cerrar tu sesión?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar sesión',
+        onPress: async () => {
+          await signOut();
+          router.replace('/login');
+        },
+      },
+    ]);
   };
 
-  if (!currentUser) {
+  if (loading || !session) {
     return (
       <ThemedView style={styles.container}>
-        <ThemedText>Cargando datos...</ThemedText>
+        <ThemedText style={{ padding: 20 }}>Cargando...</ThemedText>
       </ThemedView>
+    );
+  }
+
+  if (!myBusiness) {
+    // El usuario está logueado pero no tiene un negocio asociado.
+    // Esto puede pasar si confirmó el email y aún no completamos el alta del business.
+    return (
+      <ScrollView style={styles.container}>
+        <ThemedView style={styles.adminContainer}>
+          <ThemedText style={styles.title}>Tu cuenta no tiene un comercio asociado</ThemedText>
+          <ThemedText style={styles.businessDisplay}>
+            Email: {authUser?.email}
+          </ThemedText>
+          <ThemedText style={[styles.businessDisplay, { marginBottom: 20 }]}>
+            Esto puede pasar si confirmaste tu email después de registrarte. Por
+            ahora cerrá sesión y volvé a registrar tu comercio.
+          </ThemedText>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
+      </ScrollView>
     );
   }
 
@@ -138,7 +139,7 @@ export default function AdminScreen() {
       <ThemedView style={styles.adminContainer}>
         <ThemedText style={styles.title}>Panel de Administración de Precios</ThemedText>
         <ThemedText style={styles.businessDisplay}>
-          Administrando: {currentUser.business.name} ({currentUser.business.id})
+          Administrando: {myBusiness.name}
         </ThemedText>
 
         {/* Formulario de carga */}
@@ -200,22 +201,22 @@ export default function AdminScreen() {
         {/* Lista de productos */}
         <ThemedView style={styles.productListSection}>
           <ThemedText style={styles.sectionTitle}>Tus Productos Cargados</ThemedText>
-          {myProducts.length > 0 ? (
+          {myPrices.length > 0 ? (
             <ThemedView style={styles.productList}>
-              {myProducts.map((product, index) => (
-                <ThemedView key={index} style={styles.productItem}>
+              {myPrices.map((price) => (
+                <ThemedView key={price.id} style={styles.productItem}>
                   <ThemedView style={styles.productInfo}>
-                    <ThemedText style={styles.productNameText}>{product.product}</ThemedText>
+                    <ThemedText style={styles.productNameText}>{price.product_name}</ThemedText>
                     <ThemedText style={styles.productPriceText}>
-                      ${product.price.toLocaleString('es-AR')} {product.unit}
+                      ${price.price.toLocaleString('es-AR')} {price.unit}
                     </ThemedText>
                     <ThemedText style={styles.productUpdated}>
-                      Actualizado: {product.updated}
+                      Actualizado: {new Date(price.updated_at).toLocaleString('es-AR')}
                     </ThemedText>
                   </ThemedView>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.deleteButton}
-                    onPress={() => handleDeleteProduct(product)}
+                    onPress={() => handleDeletePrice(price)}
                   >
                     <ThemedText style={styles.deleteButtonText}>Eliminar</ThemedText>
                   </TouchableOpacity>
@@ -224,7 +225,7 @@ export default function AdminScreen() {
             </ThemedView>
           ) : (
             <ThemedText style={styles.emptyList}>
-              No has cargado ningún producto aún.
+              No cargaste ningún producto todavía.
             </ThemedText>
           )}
         </ThemedView>

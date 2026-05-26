@@ -2,45 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { router } from 'expo-router';
+import { router, Link } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 
 export default function LoginScreen() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { isLoggedIn, login } = useApp();
+  const { session, signIn } = useApp();
 
   useEffect(() => {
-    if (isLoggedIn) {
+    if (session) {
       router.replace('/admin');
     }
-  }, [isLoggedIn]);
+  }, [session]);
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Por favor complete todos los campos');
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Atención', 'Por favor completá todos los campos.');
       return;
     }
 
     setIsLoading(true);
-
     try {
-      const success = await login(username, password);
-      
-      if (success) {
-        Alert.alert('Éxito', '¡Acceso concedido! Redirigiendo...', [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/admin')
-          }
-        ]);
-      } else {
-        Alert.alert('Error', 'Usuario o contraseña incorrectos. Intente de nuevo.');
+      const { error } = await signIn(email.trim(), password);
+      if (error) {
+        Alert.alert('Error al ingresar', error);
       }
-    } catch (error) {
-      console.error('Error logging in:', error);
-      Alert.alert('Error', 'Error al iniciar sesión');
+      // Si fue exitoso, el useEffect de arriba redirige cuando session cambie
+    } catch (e) {
+      Alert.alert('Error', 'Ocurrió un error inesperado. Probá de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -49,43 +40,54 @@ export default function LoginScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedView style={styles.loginContainer}>
-        <ThemedText style={styles.title}>Acceso para Dueños de Negocios</ThemedText>
-        
+        <ThemedText style={styles.title}>Acceso para Comercios</ThemedText>
+
         <ThemedView style={styles.formGroup}>
-          <ThemedText style={styles.label}>Usuario (Ej: pepe_don)</ThemedText>
+          <ThemedText style={styles.label}>Email</ThemedText>
           <TextInput
             style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Ingrese su usuario"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="tu@email.com"
             placeholderTextColor="#999"
             autoCapitalize="none"
+            keyboardType="email-address"
+            autoComplete="email"
             editable={!isLoading}
           />
         </ThemedView>
 
         <ThemedView style={styles.formGroup}>
-          <ThemedText style={styles.label}>Contraseña (Ej: 12345)</ThemedText>
+          <ThemedText style={styles.label}>Contraseña</ThemedText>
           <TextInput
             style={styles.input}
             value={password}
             onChangeText={setPassword}
-            placeholder="Ingrese su contraseña"
+            placeholder="Ingresá tu contraseña"
             placeholderTextColor="#999"
             secureTextEntry
+            autoComplete="password"
             editable={!isLoading}
           />
         </ThemedView>
 
-        <TouchableOpacity 
-          style={[styles.loginButton, isLoading && styles.loginButtonDisabled]} 
+        <TouchableOpacity
+          style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
           onPress={handleLogin}
           disabled={isLoading}
         >
           <ThemedText style={styles.loginButtonText}>
-            {isLoading ? 'Ingresando...' : 'Ingresar al Panel'}
+            {isLoading ? 'Ingresando...' : 'Ingresar'}
           </ThemedText>
         </TouchableOpacity>
+
+        <Link href="/signup" asChild>
+          <TouchableOpacity style={styles.signupLink}>
+            <ThemedText style={styles.signupLinkText}>
+              ¿No tenés cuenta? Registrá tu comercio
+            </ThemedText>
+          </TouchableOpacity>
+        </Link>
       </ThemedView>
     </ThemedView>
   );
@@ -149,5 +151,15 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  signupLink: {
+    marginTop: 20,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  signupLinkText: {
+    color: '#007bff',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });

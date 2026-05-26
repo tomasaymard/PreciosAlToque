@@ -1,249 +1,311 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// AppContext — estado compartido de la app.
+//
+// Migración Fase 2: ahora todo viene de Supabase en lugar de AsyncStorage.
+// - Los negocios y precios se leen de las tablas `businesses` y `prices`.
+// - El login usa Supabase Auth (email + password), no más usuarios hardcoded.
+// - Los precios se crean/actualizan/borran con upsert/delete contra Supabase,
+//   y las RLS policies de la DB se encargan de que un comerciante solo pueda
+//   tocar sus propios precios.
+//
+// El componente <AppProvider> envuelve a toda la app (ver app/_layout.tsx)
+// y expone su estado con el hook useApp().
 
-// Interfaces
-export interface Product {
-  business_id: string;
-  product: string;
-  price: number;
-  unit: string;
-  updated: string;
-}
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { Session, User as AuthUser } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+
+// ---------------------------------------------------------------------
+// Tipos que matchean el schema de Supabase
+// ---------------------------------------------------------------------
 
 export interface Business {
   id: string;
+  owner_id: string | null;
   name: string;
-  coords: { lat: number; lon: number };
-  address: string;
+  address: string | null;
+  lat: number | null;
+  lon: number | null;
+  created_at: string;
 }
 
-export interface User {
-  username: string;
+export interface Price {
+  id: string;
+  business_id: string;
+  product_name: string;
+  price: number;
+  unit: string;
+  updated_at: string;
+}
+
+// Resultado de búsqueda: precio + el negocio que lo cargó, todo en un objeto
+export interface PriceWithBusiness extends Price {
   business: Business;
 }
 
 interface AppContextType {
-  // Productos
-  products: Product[];
-  loadProducts: () => Promise<void>;
-  addProduct: (product: Product) => Promise<void>;
-  updateProduct: (product: Product) => Promise<void>;
-  deleteProduct: (businessId: string, productName: string) => Promise<void>;
-  
-  // Autenticación
-  isLoggedIn: boolean;
-  currentUser: User | null;
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => Promise<void>;
-  
+  // Carga inicial
+  loading: boolean;
+
+  // Datos
+  businesses: Business[];
+  prices: Price[];
+  refresh: () => Promise<void>;
+
+  // Auth
+  session: Session | null;
+  authUser: AuthUser | null;
+  /** El negocio del usuario logueado, o null si no está logueado o no tiene negocio asociado */
+  myBusiness: Business | null;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    businessName: string,
+    address: string
+  ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
+  signOut: () => Promise<void>;
+
+  // CRUD de precios (solo el dueño del negocio puede; lo enforzan las RLS)
+  upsertPrice: (productName: string, price: number, unit: string) => Promise<void>;
+  deletePrice: (priceId: string) => Promise<void>;
+
   // Búsqueda
-  searchProducts: (term: string) => Product[];
+  searchPrices: (term: string) => PriceWithBusiness[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Datos estáticos
-export const BUSINESSES: Business[] = [
-  { id: 'N001', name: "Verdulería Don Pepe", coords: { lat: -34.60, lon: -58.42 }, address: "Av. Corrientes 3000" },
-  { id: 'N002', name: "Supermercado Chino", coords: { lat: -34.61, lon: -58.41 }, address: "Calle Honduras 150" },
-  { id: 'N003', name: "Panadería El Sol", coords: { lat: -34.605, lon: -58.425 }, address: "Esquina Rivadavia" },
-  { id: 'N004', name: "Almacén de Doña Rosa", coords: { lat: -34.615, lon: -58.43 }, address: "Pasaje Sarmiento 12" }
-];
-
-// Productos sembrados para el primer arranque — se usan tanto como estado inicial
-// (para que la búsqueda funcione desde el render 0) como fallback si AsyncStorage falla.
-// Esto es temporal: en la Fase 2 se reemplaza por datos reales desde Supabase.
-const INITIAL_PRODUCTS: Product[] = [
-  { business_id: 'N001', product: "banana", price: 1500, unit: "el kilo", updated: "Hace 1h" },
-  { business_id: 'N001', product: "manzana", price: 1800, unit: "el kilo", updated: "Hace 1h" },
-  { business_id: 'N002', product: "leche", price: 950, unit: "el litro", updated: "Hace 2h" },
-  { business_id: 'N002', product: "arroz", price: 2300, unit: "el kilo", updated: "Hace 2h" },
-  { business_id: 'N003', product: "pan", price: 2100, unit: "el kilo", updated: "Hace 30m" },
-  { business_id: 'N004', product: "leche", price: 1050, unit: "el litro", updated: "Hace 4h" },
-  { business_id: 'N004', product: "pan", price: 1900, unit: "el kilo", updated: "Hace 4h" }
-];
-
-const VALID_CREDENTIALS: { [key: string]: string } = {
-  "pepe_don": "12345",
-  "super_chino": "67890"
-};
-
-const USER_TO_BUSINESS: { [key: string]: string } = {
-  "pepe_don": "N001",
-  "super_chino": "N002"
-};
+// ---------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------
 
 interface AppProviderProps {
   children: ReactNode;
 }
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
-  // Iniciamos products con los datos sembrados para que la primera búsqueda
-  // siempre funcione, incluso si AsyncStorage tarda o falla.
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [prices, setPrices] = useState<Price[]>([]);
+  const [session, setSession] = useState<Session | null>(null);
 
-  useEffect(() => {
-    initializeApp();
+  const authUser = session?.user ?? null;
+  // Buscamos el negocio del usuario logueado dentro de la lista que ya tenemos cargada,
+  // así no hacemos otra query al servidor.
+  const myBusiness = authUser
+    ? businesses.find((b) => b.owner_id === authUser.id) ?? null
+    : null;
+
+  // Trae negocios y precios desde Supabase. Se llama al montar y después de
+  // cualquier cambio (login, signup, upsert, delete).
+  const refresh = useCallback(async (): Promise<void> => {
+    const [businessesRes, pricesRes] = await Promise.all([
+      supabase.from('businesses').select('*').order('name'),
+      supabase.from('prices').select('*').order('updated_at', { ascending: false }),
+    ]);
+
+    if (businessesRes.error) {
+      console.error('Error cargando negocios:', businessesRes.error.message);
+    } else {
+      setBusinesses(businessesRes.data || []);
+    }
+
+    if (pricesRes.error) {
+      console.error('Error cargando precios:', pricesRes.error.message);
+    } else {
+      setPrices(pricesRes.data || []);
+    }
   }, []);
 
-  const initializeApp = async () => {
-    await loadProducts();
-    await checkExistingSession();
-  };
+  // Carga inicial de datos
+  useEffect(() => {
+    refresh().finally(() => setLoading(false));
+  }, [refresh]);
 
-  const loadProducts = async (): Promise<void> => {
-    try {
-      const storedProducts = await AsyncStorage.getItem('priceProducts');
-      if (storedProducts) {
-        const parsed = JSON.parse(storedProducts) as Product[];
-        // Solo sobrescribimos el estado si lo guardado tiene contenido válido.
-        // Si está vacío o corrupto, dejamos los INITIAL_PRODUCTS que ya están en el estado.
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setProducts(parsed);
-        }
-      } else {
-        // Primera vez: persistimos los datos sembrados a AsyncStorage.
-        await AsyncStorage.setItem('priceProducts', JSON.stringify(INITIAL_PRODUCTS));
-      }
-    } catch (error) {
-      console.error('Error loading products:', error);
-      // Si AsyncStorage falla, los INITIAL_PRODUCTS ya están en el estado, así que la app sigue usable.
+  // Sincronización con el estado de auth de Supabase
+  useEffect(() => {
+    // Sesión actual (puede haber una persistida en AsyncStorage de un login previo)
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+    });
+
+    // Escuchar cambios futuros (login, logout, refresh de token)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const signIn = async (
+    email: string,
+    password: string
+  ): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      return { error: translateAuthError(error.message) };
     }
+    return { error: null };
   };
 
-  const saveProducts = async (newProducts: Product[]): Promise<void> => {
-    try {
-      await AsyncStorage.setItem('priceProducts', JSON.stringify(newProducts));
-      setProducts(newProducts);
-    } catch (error) {
-      console.error('Error saving products:', error);
-      throw error;
+  const signUp = async (
+    email: string,
+    password: string,
+    businessName: string,
+    address: string
+  ): Promise<{ error: string | null; needsEmailConfirmation: boolean }> => {
+    // 1. Crear la cuenta de usuario en Supabase Auth
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      return { error: translateAuthError(error.message), needsEmailConfirmation: false };
     }
-  };
-
-  const addProduct = async (product: Product): Promise<void> => {
-    const newProducts = [...products, product];
-    await saveProducts(newProducts);
-  };
-
-  const updateProduct = async (updatedProduct: Product): Promise<void> => {
-    const newProducts = products.map(p => 
-      p.business_id === updatedProduct.business_id && p.product === updatedProduct.product
-        ? updatedProduct
-        : p
-    );
-    await saveProducts(newProducts);
-  };
-
-  const deleteProduct = async (businessId: string, productName: string): Promise<void> => {
-    const newProducts = products.filter(p => 
-      !(p.business_id === businessId && p.product === productName)
-    );
-    await saveProducts(newProducts);
-  };
-
-  const checkExistingSession = async (): Promise<void> => {
-    try {
-      const loggedIn = await AsyncStorage.getItem('isLoggedIn');
-      const username = await AsyncStorage.getItem('currentUser');
-      
-      if (loggedIn === 'true' && username) {
-        const businessId = USER_TO_BUSINESS[username];
-        const business = BUSINESSES.find(b => b.id === businessId);
-        
-        if (business) {
-          setIsLoggedIn(true);
-          setCurrentUser({ username, business });
-        }
-      }
-    } catch (error) {
-      console.error('Error checking session:', error);
+    if (!data.user) {
+      return { error: 'No se pudo crear la cuenta.', needsEmailConfirmation: false };
     }
-  };
 
-  const login = async (username: string, password: string): Promise<boolean> => {
-    try {
-      // Verificar credenciales
-      if (VALID_CREDENTIALS[username] !== password) {
-        return false;
-      }
-
-      // Obtener información del negocio
-      const businessId = USER_TO_BUSINESS[username];
-      const business = BUSINESSES.find(b => b.id === businessId);
-      
-      if (!business) {
-        return false;
-      }
-
-      // Guardar sesión
-      await AsyncStorage.setItem('isLoggedIn', 'true');
-      await AsyncStorage.setItem('currentUser', username);
-      
-      setIsLoggedIn(true);
-      setCurrentUser({ username, business });
-      
-      return true;
-    } catch (error) {
-      console.error('Error logging in:', error);
-      return false;
+    // Si Supabase tiene "Confirm email" activado, signUp no crea sesión —
+    // el usuario tiene que clickear el link del mail antes de poder hacer nada.
+    // En ese caso, NO podemos crear el negocio acá porque la RLS lo va a
+    // rechazar (auth.uid() es null). Avisamos para que el usuario confirme y
+    // después complete el alta en otra pantalla, o desactivá email confirmation
+    // en el dashboard de Supabase para desarrollo.
+    if (!data.session) {
+      return {
+        error: null,
+        needsEmailConfirmation: true,
+      };
     }
-  };
 
-  const logout = async (): Promise<void> => {
-    try {
-      await AsyncStorage.removeItem('isLoggedIn');
-      await AsyncStorage.removeItem('currentUser');
-      
-      setIsLoggedIn(false);
-      setCurrentUser(null);
-    } catch (error) {
-      console.error('Error logging out:', error);
-      throw error;
+    // 2. Crear el negocio asociado (auth.uid() ya es el nuevo usuario)
+    const { error: businessError } = await supabase.from('businesses').insert({
+      owner_id: data.user.id,
+      name: businessName.trim(),
+      address: address.trim() || null,
+    });
+
+    if (businessError) {
+      return {
+        error: 'Cuenta creada, pero no se pudo crear el negocio: ' + businessError.message,
+        needsEmailConfirmation: false,
+      };
     }
+
+    // 3. Refrescar para que aparezca el negocio recién creado en la lista
+    await refresh();
+
+    return { error: null, needsEmailConfirmation: false };
   };
 
-  const searchProducts = (term: string): Product[] => {
+  const signOut = async (): Promise<void> => {
+    await supabase.auth.signOut();
+  };
+
+  const upsertPrice = async (
+    productName: string,
+    price: number,
+    unit: string
+  ): Promise<void> => {
+    if (!myBusiness) {
+      throw new Error('No tenés un negocio asociado a tu cuenta.');
+    }
+
+    // El trigger en la DB normaliza product_name a minúsculas y trim.
+    // El unique index (business_id, product_name) hace que el upsert
+    // reemplace si ya hay un precio para ese producto en este negocio.
+    const { error } = await supabase
+      .from('prices')
+      .upsert(
+        {
+          business_id: myBusiness.id,
+          product_name: productName,
+          price,
+          unit,
+        },
+        { onConflict: 'business_id,product_name' }
+      );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await refresh();
+  };
+
+  const deletePrice = async (priceId: string): Promise<void> => {
+    const { error } = await supabase.from('prices').delete().eq('id', priceId);
+    if (error) {
+      throw new Error(error.message);
+    }
+    await refresh();
+  };
+
+  const searchPrices = (term: string): PriceWithBusiness[] => {
     if (!term.trim()) return [];
-    
-    const filteredProducts = products.filter(p => 
-      p.product.toLowerCase().includes(term.toLowerCase().trim())
-    );
-    
-    return filteredProducts.sort((a, b) => a.price - b.price);
+
+    const normalizedTerm = term.toLowerCase().trim();
+    const matched = prices
+      .filter((p) => p.product_name.includes(normalizedTerm))
+      .map((p) => {
+        const business = businesses.find((b) => b.id === p.business_id);
+        return business ? { ...p, business } : null;
+      })
+      .filter((p): p is PriceWithBusiness => p !== null);
+
+    return matched.sort((a, b) => a.price - b.price);
   };
 
   const value: AppContextType = {
-    // Productos
-    products,
-    loadProducts,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    
-    // Autenticación
-    isLoggedIn,
-    currentUser,
-    login,
-    logout,
-    
-    // Búsqueda
-    searchProducts
+    loading,
+    businesses,
+    prices,
+    refresh,
+    session,
+    authUser,
+    myBusiness,
+    signIn,
+    signUp,
+    signOut,
+    upsertPrice,
+    deletePrice,
+    searchPrices,
   };
 
-  return (
-    <AppContext.Provider value={value}>
-      {children}
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
 export const useApp = (): AppContextType => {
   const context = useContext(AppContext);
   if (context === undefined) {
-    throw new Error('useApp must be used within an AppProvider');
+    throw new Error('useApp debe usarse dentro de un AppProvider');
   }
   return context;
 };
+
+// ---------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------
+
+/** Traduce mensajes de error de Supabase Auth a español */
+function translateAuthError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes('invalid login credentials')) {
+    return 'Email o contraseña incorrectos.';
+  }
+  if (lower.includes('email not confirmed')) {
+    return 'Tenés que confirmar el email antes de ingresar. Revisá tu casilla.';
+  }
+  if (lower.includes('user already registered') || lower.includes('already been registered')) {
+    return 'Ya existe una cuenta con ese email.';
+  }
+  if (lower.includes('password should be at least')) {
+    return 'La contraseña tiene que tener al menos 6 caracteres.';
+  }
+  if (lower.includes('unable to validate email')) {
+    return 'El email no tiene un formato válido.';
+  }
+  return message;
+}
