@@ -1,10 +1,10 @@
 // Pantalla de registro para comerciantes que quieren publicar precios.
 //
 // Flujo:
-// 1. Pide email + password + nombre del comercio + dirección.
+// 1. Pide email + password + nombre del comercio + dirección + ubicación.
 // 2. Llama a signUp() del AppContext, que internamente:
 //    - Crea la cuenta en Supabase Auth
-//    - Crea el row del business con owner_id = nuevo user id
+//    - Crea el row del business con owner_id = nuevo user id y lat/lon
 // 3. Si Supabase tiene "Confirm email" activado (default), no hay sesión
 //    activa después de signUp — avisamos al usuario que confirme su mail.
 //    Si está desactivado (recomendado en desarrollo), redirigimos al panel admin.
@@ -15,14 +15,35 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
+import { Coords } from '@/lib/geo';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const [capturingLocation, setCapturingLocation] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { signUp } = useApp();
+  const { signUp, requestLocation, userLocation } = useApp();
+
+  const handleCaptureLocation = async () => {
+    setCapturingLocation(true);
+    try {
+      const coords = await requestLocation();
+      if (coords) {
+        setCoords(coords);
+        Alert.alert('Ubicación capturada', 'Tomamos tu ubicación actual como la del comercio.');
+      } else {
+        Alert.alert(
+          'No pudimos obtener tu ubicación',
+          'Revisá que el GPS esté activado y que le diste permiso de ubicación a la app.'
+        );
+      }
+    } finally {
+      setCapturingLocation(false);
+    }
+  };
 
   const handleSignup = async () => {
     if (!email.trim() || !password.trim() || !businessName.trim()) {
@@ -40,7 +61,8 @@ export default function SignupScreen() {
         email.trim(),
         password,
         businessName,
-        address
+        address,
+        coords ?? userLocation
       );
 
       if (error) {
@@ -130,6 +152,27 @@ export default function SignupScreen() {
           />
         </ThemedView>
 
+        <ThemedView style={styles.formGroup}>
+          <ThemedText style={styles.label}>Ubicación del comercio</ThemedText>
+          <ThemedText style={styles.locationHint}>
+            Para que los vecinos te encuentren por cercanía, capturá la ubicación
+            parándote en tu comercio.
+          </ThemedText>
+          <TouchableOpacity
+            style={[styles.locationButton, coords && styles.locationButtonDone]}
+            onPress={handleCaptureLocation}
+            disabled={capturingLocation || isLoading}
+          >
+            <ThemedText style={styles.locationButtonText}>
+              {capturingLocation
+                ? 'Obteniendo ubicación...'
+                : coords
+                ? '✓ Ubicación capturada (tocá para volver a tomarla)'
+                : '📍 Usar mi ubicación actual'}
+            </ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
+
         <TouchableOpacity
           style={[styles.signupButton, isLoading && styles.signupButtonDisabled]}
           onPress={handleSignup}
@@ -201,6 +244,28 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#333',
+  },
+  locationHint: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 8,
+  },
+  locationButton: {
+    borderWidth: 1,
+    borderColor: '#007bff',
+    borderRadius: 4,
+    padding: 12,
+    alignItems: 'center',
+    backgroundColor: '#eaf3ff',
+  },
+  locationButtonDone: {
+    borderColor: '#28a745',
+    backgroundColor: '#eafbef',
+  },
+  locationButtonText: {
+    fontSize: 14,
+    color: '#333',
+    textAlign: 'center',
   },
   signupButton: {
     backgroundColor: '#28a745',

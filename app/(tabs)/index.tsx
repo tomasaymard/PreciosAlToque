@@ -3,7 +3,8 @@ import { StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, RefreshCont
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Link } from 'expo-router';
-import { useApp, PriceWithBusiness } from '@/contexts/AppContext';
+import { useApp, PriceWithBusiness, SortBy } from '@/contexts/AppContext';
+import { formatDistance } from '@/lib/geo';
 
 interface PriceCardProps {
   item: PriceWithBusiness;
@@ -31,8 +32,11 @@ const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice }) => (
     </ThemedView>
     <ThemedView style={styles.meta}>
       <ThemedText style={styles.address}>{item.business.address || 'Sin dirección'}</ThemedText>
-      <ThemedText style={styles.updatedTime}>Actualizado: {formatUpdatedAt(item.updated_at)}</ThemedText>
+      {item.distance != null && (
+        <ThemedText style={styles.distance}>📍 a {formatDistance(item.distance)}</ThemedText>
+      )}
     </ThemedView>
+    <ThemedText style={styles.updatedTime}>Actualizado: {formatUpdatedAt(item.updated_at)}</ThemedText>
   </ThemedView>
 );
 
@@ -40,15 +44,35 @@ export default function HomeScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<PriceWithBusiness[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const { searchPrices, refresh, loading } = useApp();
+  const [sortBy, setSortBy] = useState<SortBy>('price');
+  const { searchPrices, refresh, loading, userLocation, requestLocation } = useApp();
 
-  const handleSearch = () => {
+  const handleSearch = (overrideSort?: SortBy) => {
     if (!searchTerm.trim()) {
       Alert.alert('Atención', 'Por favor ingresá un producto para buscar.');
       return;
     }
-    const searchResults = searchPrices(searchTerm);
+    const searchResults = searchPrices(searchTerm, overrideSort ?? sortBy);
     setResults(searchResults);
+  };
+
+  const handleChangeSort = async (newSort: SortBy) => {
+    if (newSort === 'distance' && !userLocation) {
+      // Necesitamos la ubicación: la pedimos ahora
+      const coords = await requestLocation();
+      if (!coords) {
+        Alert.alert(
+          'Ubicación no disponible',
+          'Para ordenar por cercanía necesitamos acceso a tu ubicación. Podés activarlo en los permisos de la app.'
+        );
+        return;
+      }
+    }
+    setSortBy(newSort);
+    // Re-buscar con el nuevo orden si ya hay una búsqueda activa
+    if (searchTerm.trim()) {
+      setResults(searchPrices(searchTerm, newSort));
+    }
   };
 
   const handleRefresh = async () => {
@@ -56,7 +80,7 @@ export default function HomeScreen() {
     await refresh();
     // Si había una búsqueda activa, la repetimos con los datos frescos
     if (searchTerm.trim()) {
-      setResults(searchPrices(searchTerm));
+      setResults(searchPrices(searchTerm, sortBy));
     }
     setRefreshing(false);
   };
@@ -83,11 +107,32 @@ export default function HomeScreen() {
           onChangeText={setSearchTerm}
           placeholderTextColor="#666"
           returnKeyType="search"
-          onSubmitEditing={handleSearch}
+          onSubmitEditing={() => handleSearch()}
         />
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+        <TouchableOpacity style={styles.searchButton} onPress={() => handleSearch()}>
           <ThemedText style={styles.searchButtonText}>Buscar Precios</ThemedText>
         </TouchableOpacity>
+
+        {/* Toggle de orden */}
+        <ThemedView style={styles.sortRow}>
+          <ThemedText style={styles.sortLabel}>Ordenar por:</ThemedText>
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy === 'price' && styles.sortButtonActive]}
+            onPress={() => handleChangeSort('price')}
+          >
+            <ThemedText style={[styles.sortButtonText, sortBy === 'price' && styles.sortButtonTextActive]}>
+              💲 Precio
+            </ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy === 'distance' && styles.sortButtonActive]}
+            onPress={() => handleChangeSort('distance')}
+          >
+            <ThemedText style={[styles.sortButtonText, sortBy === 'distance' && styles.sortButtonTextActive]}>
+              📍 Cercanía
+            </ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
       </ThemedView>
 
       {/* Results Section */}
@@ -125,18 +170,18 @@ export default function HomeScreen() {
         )}
       </ThemedView>
 
-      {/* Map Section */}
+      {/* Map Section — el mapa visual con marcadores llega en una próxima versión */}
       <ThemedView style={styles.mapSection}>
-        <ThemedText style={styles.mapTitle}>Ubicación de Precios Cercanos</ThemedText>
+        <ThemedText style={styles.mapTitle}>Mapa de comercios</ThemedText>
         <ThemedView style={styles.mapContainer}>
           <ThemedView style={styles.mapView}>
             <ThemedText style={styles.mapPlaceholder}>
-              [Simulación de un mapa interactivo]
+              🗺️ El mapa con los comercios marcados está en camino.
             </ThemedText>
           </ThemedView>
         </ThemedView>
         <ThemedText style={styles.mapLegend}>
-          Haga clic en un marcador para ver el precio.
+          Por ahora podés ordenar los resultados por cercanía con el botón 📍.
         </ThemedText>
       </ThemedView>
 
@@ -211,6 +256,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 8,
+  },
+  sortLabel: {
+    fontSize: 13,
+    color: '#6c757d',
+  },
+  sortButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    backgroundColor: 'white',
+  },
+  sortButtonActive: {
+    backgroundColor: '#007bff',
+    borderColor: '#007bff',
+  },
+  sortButtonText: {
+    fontSize: 13,
+    color: '#555',
+  },
+  sortButtonTextActive: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
   resultsSection: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -276,9 +351,15 @@ const styles = StyleSheet.create({
     color: '#6c757d',
     flex: 1,
   },
+  distance: {
+    fontSize: 12,
+    color: '#007bff',
+    fontWeight: 'bold',
+  },
   updatedTime: {
     fontSize: 12,
     color: '#6c757d',
+    marginTop: 4,
   },
   placeholder: {
     backgroundColor: 'white',

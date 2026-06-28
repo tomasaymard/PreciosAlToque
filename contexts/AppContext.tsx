@@ -12,7 +12,9 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Session, User as AuthUser } from '@supabase/supabase-js';
+import * as Location from 'expo-location';
 import { supabase } from '@/lib/supabase';
+import { Coords, distanceInMeters } from '@/lib/geo';
 
 // ---------------------------------------------------------------------
 // Tipos que matchean el schema de Supabase
@@ -37,10 +39,17 @@ export interface Price {
   updated_at: string;
 }
 
-// Resultado de búsqueda: precio + el negocio que lo cargó, todo en un objeto
+// Resultado de búsqueda: precio + el negocio que lo cargó, todo en un objeto.
+// distance es la distancia en metros al usuario, o null si no tenemos su
+// ubicación o el comercio no tiene coordenadas cargadas.
 export interface PriceWithBusiness extends Price {
   business: Business;
+  distance: number | null;
 }
+
+export type SortBy = 'price' | 'distance';
+
+export type LocationPermission = 'unknown' | 'granted' | 'denied';
 
 interface AppContextType {
   // Carga inicial
@@ -61,7 +70,8 @@ interface AppContextType {
     email: string,
     password: string,
     businessName: string,
-    address: string
+    address: string,
+    coords?: Coords | null
   ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
 
@@ -69,8 +79,14 @@ interface AppContextType {
   upsertPrice: (productName: string, price: number, unit: string) => Promise<void>;
   deletePrice: (priceId: string) => Promise<void>;
 
-  // Búsqueda
-  searchPrices: (term: string) => PriceWithBusiness[];
+  // Ubicación del usuario
+  userLocation: Coords | null;
+  locationPermission: LocationPermission;
+  /** Pide permiso (si hace falta) y obtiene la ubicación actual. Devuelve las coords, o null si no las consiguió. */
+  requestLocation: () => Promise<Coords | null>;
+
+  // Búsqueda. sortBy 'distance' solo tiene efecto si hay userLocation.
+  searchPrices: (term: string, sortBy?: SortBy) => PriceWithBusiness[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -88,6 +104,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
   const [session, setSession] = useState<Session | null>(null);
+  const [userLocation, setUserLocation] = useState<Coords | null>(null);
+  const [locationPermission, setLocationPermission] = useState<LocationPermission>('unknown');
 
   const authUser = session?.user ?? null;
   // Buscamos el negocio del usuario logueado dentro de la lista que ya tenemos cargada,
@@ -141,6 +159,48 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     };
   }, []);
 
+  // Pide permiso de ubicación (si todavía no fue otorgado) y obtiene la posición.
+  // Devuelve las coordenadas, o null si no las consiguió.
+  const requestLocation = useCallback(async (): Promise<Coords | null> => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationPermission('denied');
+        return null;
+      }
+      setLocationPermission('granted');
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const coords: Coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      setUserLocation(coords);
+      return coords;
+    } catch (e) {
+      console.error('Error obteniendo ubicación:', e);
+      return null;
+    }
+  }, []);
+
+  // Intento no intrusivo al arrancar: si el permiso ya estaba otorgado de antes,
+  // obtenemos la ubicación sin volver a preguntar. Si no, no molestamos todavía
+  // (se la pedimos cuando el usuario toque "ordenar por cercanía").
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status === 'granted') {
+        setLocationPermission('granted');
+        try {
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        } catch (e) {
+          console.error('Error obteniendo ubicación inicial:', e);
+        }
+      }
+    })();
+  }, []);
+
   const signIn = async (
     email: string,
     password: string
@@ -156,7 +216,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     email: string,
     password: string,
     businessName: string,
-    address: string
+    address: string,
+    coords?: Coords | null
   ): Promise<{ error: string | null; needsEmailConfirmation: boolean }> => {
     // 1. Crear la cuenta de usuario en Supabase Auth
     const { data, error } = await supabase.auth.signUp({ email, password });
@@ -185,6 +246,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       owner_id: data.user.id,
       name: businessName.trim(),
       address: address.trim() || null,
+      lat: coords?.lat ?? null,
+      lon: coords?.lon ?? null,
     });
 
     if (businessError) {
@@ -243,17 +306,39 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     await refresh();
   };
 
-  const searchPrices = (term: string): PriceWithBusiness[] => {
+  const searchPrices = (term: string, sortBy: SortBy = 'price'): PriceWithBusiness[] => {
     if (!term.trim()) return [];
 
     const normalizedTerm = term.toLowerCase().trim();
     const matched = prices
       .filter((p) => p.product_name.includes(normalizedTerm))
-      .map((p) => {
+      .map((p): PriceWithBusiness | null => {
         const business = businesses.find((b) => b.id === p.business_id);
-        return business ? { ...p, business } : null;
+        if (!business) return null;
+
+        // Distancia: solo si tenemos la ubicación del usuario Y el comercio
+        // tiene coordenadas cargadas.
+        let distance: number | null = null;
+        if (userLocation && business.lat != null && business.lon != null) {
+          distance = distanceInMeters(userLocation, {
+            lat: business.lat,
+            lon: business.lon,
+          });
+        }
+
+        return { ...p, business, distance };
       })
       .filter((p): p is PriceWithBusiness => p !== null);
+
+    if (sortBy === 'distance' && userLocation) {
+      // Ordenar por distancia. Los que no tienen distancia (sin coords) van al final.
+      return matched.sort((a, b) => {
+        if (a.distance == null && b.distance == null) return a.price - b.price;
+        if (a.distance == null) return 1;
+        if (b.distance == null) return -1;
+        return a.distance - b.distance;
+      });
+    }
 
     return matched.sort((a, b) => a.price - b.price);
   };
@@ -271,6 +356,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     signOut,
     upsertPrice,
     deletePrice,
+    userLocation,
+    locationPermission,
+    requestLocation,
     searchPrices,
   };
 
