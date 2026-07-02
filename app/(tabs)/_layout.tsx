@@ -1,33 +1,49 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Brand, Type } from '@/constants/theme';
+import { useApp } from '@/contexts/AppContext';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  // La pestaña "Mi negocio" es solo para comerciantes: aparece únicamente
+  // cuando hay sesión iniciada. Los clientes no tienen cuenta (por ahora),
+  // así que para ellos la app es Mapa + Buscar. El comerciante entra la
+  // primera vez por el link "¿Tenés un comercio?" de la pantalla Buscar.
+  const { session } = useApp();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Brand.primary,
+        tabBarInactiveTintColor: Brand.textMuted,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarLabelStyle: { fontFamily: Type.semibold, fontSize: 11 },
+        tabBarStyle: { backgroundColor: Brand.surface },
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Precios',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="cart.fill" color={color} />,
+          title: 'Mapa',
+          tabBarIcon: ({ color }) => <Ionicons size={24} name="map-outline" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="buscar"
         options={{
-          title: 'Explorar',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Buscar',
+          tabBarIcon: ({ color }) => <Ionicons size={24} name="search-outline" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="mi-negocio"
+        options={{
+          title: 'Mi negocio',
+          tabBarIcon: ({ color }) => <Ionicons size={24} name="storefront-outline" color={color} />,
+          // href: null saca la pestaña de la barra (la ruta sigue existiendo)
+          href: session ? undefined : null,
         }}
       />
     </Tabs>
