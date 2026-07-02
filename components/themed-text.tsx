@@ -1,6 +1,7 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { Brand, Type } from '@/constants/theme';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
@@ -33,28 +34,33 @@ export function ThemedText({
   );
 }
 
+// Nota: con fuentes custom en React Native, cada peso es una familia distinta
+// (Nunito_700Bold, etc.) — usar fontWeight con fuente custom produce "negrita
+// falsa" en Android. Por eso cada estilo fija su fontFamily.
 const styles = StyleSheet.create({
   default: {
     fontSize: 16,
     lineHeight: 24,
+    fontFamily: Type.regular,
   },
   defaultSemiBold: {
     fontSize: 16,
     lineHeight: 24,
-    fontWeight: '600',
+    fontFamily: Type.semibold,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 32,
+    lineHeight: 36,
+    fontFamily: Type.bold,
   },
   subtitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontFamily: Type.bold,
   },
   link: {
     lineHeight: 30,
     fontSize: 16,
-    color: '#0a7ea4',
+    fontFamily: Type.regular,
+    color: Brand.primary,
   },
 });
