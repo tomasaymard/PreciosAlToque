@@ -4,16 +4,17 @@ App móvil para comparar precios de productos en locales cercanos. Pensada para 
 
 ## Estado
 
-Proyecto en desarrollo temprano. Versión actual: 0.1.0.
+Proyecto en desarrollo. Versión actual: 0.1.0.
 
-Construido con **Expo (React Native)**. El backend con base de datos compartida (Supabase) y la geolocalización real son las próximas fases.
+Construido con **Expo (React Native)** sobre **Supabase** (base de datos compartida + autenticación). Ya funciona el flujo completo: los comercios se registran y cargan precios, los vecinos buscan un producto y ven los precios ordenados por valor o por cercanía. Falta el mapa visual con marcadores y el pulido final.
 
 ## Stack
 
 - **Frontend**: React Native + Expo Router (file-based routing)
 - **Lenguaje**: TypeScript
 - **Estado**: Context API
-- **Persistencia (temporal)**: AsyncStorage — se reemplaza por Supabase en la fase siguiente
+- **Backend**: Supabase (Postgres + Auth + Row Level Security)
+- **Geolocalización**: expo-location + distancia haversine propia (`lib/geo.ts`)
 
 ## Desarrollo
 
@@ -24,11 +25,21 @@ npx expo start
 
 Después se escanea el QR con la app **Expo Go** (Android) para ver la app en el celular.
 
+Requiere un archivo `.env` en la raíz (no versionado) con:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=<url del proyecto Supabase>
+EXPO_PUBLIC_SUPABASE_KEY=<publishable key>
+```
+
+El schema de la base está en [supabase/schema.sql](supabase/schema.sql) — se pega en el SQL Editor de Supabase y es idempotente (se puede correr más de una vez).
+
 ## Roadmap
 
 - [x] Fase 1: Limpieza del repo y unificación en una sola versión React Native
-- [ ] Fase 2: Backend con Supabase (auth real, DB compartida, multi-usuario)
-- [ ] Fase 3: Mapa real con `react-native-maps` y geolocalización con `expo-location`
+- [x] Fase 2: Backend con Supabase (auth real, DB compartida, multi-usuario)
+- [x] Fase 3a: Geolocalización con `expo-location` — distancia en resultados y orden por cercanía
+- [ ] Fase 3b: Mapa visual con marcadores de comercios
 - [ ] Fase 4: Foto de producto, categorías, filtros, build con EAS
 
 ## Licencia
