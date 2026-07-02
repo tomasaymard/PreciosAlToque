@@ -8,7 +8,7 @@
 // - Panel inferior "Cerca tuyo": comercios ordenados por distancia; al tocar
 //   uno (en el panel o en el mapa) se ven sus productos y precios
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, FlatList, Alert } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -89,6 +89,41 @@ export default function MapHomeScreen() {
     ? { latitude: userLocation.lat, longitude: userLocation.lon, latitudeDelta: 0.02, longitudeDelta: 0.02 }
     : DEFAULT_REGION;
 
+  // Ajuste inicial del encuadre: cuando ya tenemos comercios con coordenadas,
+  // acomodamos el zoom para que entren el usuario y los comercios más cercanos.
+  // Sin esto, si los comercios quedan fuera del radio inicial el mapa se ve
+  // vacío y parece que no hay nada cargado.
+  const didFitRef = useRef(false);
+  useEffect(() => {
+    if (didFitRef.current || businessesWithCoords.length === 0) return;
+
+    // Hasta 5 comercios más cercanos (o los primeros 5 si no hay ubicación)
+    const nearest = [...businessesWithCoords]
+      .sort((a, b) => {
+        if (!userLocation) return 0;
+        const da = distanceInMeters(userLocation, { lat: a.lat!, lon: a.lon! });
+        const db = distanceInMeters(userLocation, { lat: b.lat!, lon: b.lon! });
+        return da - db;
+      })
+      .slice(0, 5)
+      .map((b) => ({ latitude: b.lat!, longitude: b.lon! }));
+
+    const coords = userLocation
+      ? [{ latitude: userLocation.lat, longitude: userLocation.lon }, ...nearest]
+      : nearest;
+
+    // Pequeño delay para asegurar que el mapa ya está montado
+    const timer = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(coords, {
+        edgePadding: { top: 140, right: 60, bottom: 280, left: 60 },
+        animated: true,
+      });
+      didFitRef.current = true;
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [businessesWithCoords, userLocation]);
+
   return (
     <View style={styles.container}>
       <MapView
@@ -105,7 +140,6 @@ export default function MapHomeScreen() {
             key={b.id}
             coordinate={{ latitude: b.lat!, longitude: b.lon! }}
             anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={false}
             onPress={(e) => {
               e.stopPropagation();
               focusBusiness(b);

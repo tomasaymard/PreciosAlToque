@@ -11,6 +11,7 @@ export default function AdminScreen() {
   const [productPrice, setProductPrice] = useState('');
   const [productUnit, setProductUnit] = useState('el kilo');
   const [isLoading, setIsLoading] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
 
   const {
     session,
@@ -19,9 +20,33 @@ export default function AdminScreen() {
     prices,
     upsertPrice,
     deletePrice,
+    updateMyBusinessLocation,
+    requestLocation,
     signOut,
     loading,
   } = useApp();
+
+  const hasLocation = myBusiness?.lat != null && myBusiness?.lon != null;
+
+  const handleSaveLocation = async () => {
+    setSavingLocation(true);
+    try {
+      const coords = await requestLocation();
+      if (!coords) {
+        Alert.alert(
+          'Ubicación no disponible',
+          'Activá el GPS y el permiso de ubicación, parate en tu comercio y probá de nuevo.'
+        );
+        return;
+      }
+      await updateMyBusinessLocation(coords);
+      Alert.alert('Listo', 'Tu comercio ya aparece en el mapa en esta ubicación.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'No se pudo guardar la ubicación.');
+    } finally {
+      setSavingLocation(false);
+    }
+  };
 
   useEffect(() => {
     // Si no está logueado, mandamos al login
@@ -141,6 +166,28 @@ export default function AdminScreen() {
         <ThemedText style={styles.businessDisplay}>
           Administrando: {myBusiness.name}
         </ThemedText>
+
+        {/* Ubicación del comercio en el mapa */}
+        <ThemedView style={[styles.locationBox, hasLocation ? styles.locationBoxOk : styles.locationBoxMissing]}>
+          <ThemedText style={styles.locationText}>
+            {hasLocation
+              ? '📍 Tu comercio aparece en el mapa.'
+              : '⚠️ Tu comercio todavía no tiene ubicación: no aparece en el mapa.'}
+          </ThemedText>
+          <TouchableOpacity
+            style={styles.locationButton}
+            onPress={handleSaveLocation}
+            disabled={savingLocation}
+          >
+            <ThemedText style={styles.locationButtonText}>
+              {savingLocation
+                ? 'Guardando ubicación...'
+                : hasLocation
+                ? 'Actualizar ubicación (parate en tu comercio)'
+                : 'Usar mi ubicación actual (parate en tu comercio)'}
+            </ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
 
         {/* Formulario de carga */}
         <ThemedView style={styles.formSection}>
@@ -280,6 +327,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 25,
     color: '#555',
+  },
+  locationBox: {
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 25,
+    borderWidth: 1,
+  },
+  locationBoxOk: {
+    backgroundColor: '#E1F5EE',
+    borderColor: '#1D9E75',
+  },
+  locationBoxMissing: {
+    backgroundColor: '#FAEEDA',
+    borderColor: '#EF9F27',
+  },
+  locationText: {
+    fontSize: 13,
+    color: '#444',
+    marginBottom: 10,
+  },
+  locationButton: {
+    backgroundColor: '#0F6E56',
+    borderRadius: 6,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  locationButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
   formSection: {
     marginBottom: 30,

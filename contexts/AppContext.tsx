@@ -78,6 +78,8 @@ interface AppContextType {
   // CRUD de precios (solo el dueño del negocio puede; lo enforzan las RLS)
   upsertPrice: (productName: string, price: number, unit: string) => Promise<void>;
   deletePrice: (priceId: string) => Promise<void>;
+  /** Fija/actualiza la ubicación del comercio del usuario logueado */
+  updateMyBusinessLocation: (coords: Coords) => Promise<void>;
 
   // Ubicación del usuario
   userLocation: Coords | null;
@@ -309,6 +311,23 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     await refresh();
   };
 
+  // Fija o actualiza la ubicación del comercio del usuario logueado.
+  // Existe porque hay comercios registrados antes de que el signup capturara
+  // coordenadas (sin esto no aparecen nunca en el mapa).
+  const updateMyBusinessLocation = async (coords: Coords): Promise<void> => {
+    if (!myBusiness) {
+      throw new Error('No tenés un negocio asociado a tu cuenta.');
+    }
+    const { error } = await supabase
+      .from('businesses')
+      .update({ lat: coords.lat, lon: coords.lon })
+      .eq('id', myBusiness.id);
+    if (error) {
+      throw new Error(error.message);
+    }
+    await refresh();
+  };
+
   const searchPrices = (
     term: string,
     sortBy: SortBy = 'price',
@@ -366,6 +385,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     signOut,
     upsertPrice,
     deletePrice,
+    updateMyBusinessLocation,
     userLocation,
     locationPermission,
     requestLocation,
