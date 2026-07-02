@@ -19,7 +19,7 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
@@ -31,20 +31,30 @@ if (!supabaseUrl || !supabaseKey) {
   );
 }
 
+// En web, expo-router pre-renderiza la app en el servidor (SSR), donde no existe
+// `window`. AsyncStorage en web delega en window.localStorage, así que pasárselo
+// al cliente durante el SSR crashea el arranque. En ese contexto no configuramos
+// storage ni persistencia (el navegador real y el celular sí entran por la rama
+// con AsyncStorage).
+const isServer = Platform.OS === 'web' && typeof window === 'undefined';
+
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    ...(isServer ? {} : { storage: AsyncStorage }),
+    autoRefreshToken: !isServer,
+    persistSession: !isServer,
     detectSessionInUrl: false,
   },
 });
 
-// Reanuda el auto-refresh cuando la app vuelve del background
-AppState.addEventListener('change', (state) => {
-  if (state === 'active') {
-    supabase.auth.startAutoRefresh();
-  } else {
-    supabase.auth.stopAutoRefresh();
-  }
-});
+// Reanuda el auto-refresh cuando la app vuelve del background (solo tiene
+// sentido en un dispositivo real; en SSR no hay AppState)
+if (!isServer) {
+  AppState.addEventListener('change', (state) => {
+    if (state === 'active') {
+      supabase.auth.startAutoRefresh();
+    } else {
+      supabase.auth.stopAutoRefresh();
+    }
+  });
+}

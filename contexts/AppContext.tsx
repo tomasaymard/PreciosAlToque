@@ -85,8 +85,11 @@ interface AppContextType {
   /** Pide permiso (si hace falta) y obtiene la ubicación actual. Devuelve las coords, o null si no las consiguió. */
   requestLocation: () => Promise<Coords | null>;
 
-  // Búsqueda. sortBy 'distance' solo tiene efecto si hay userLocation.
-  searchPrices: (term: string, sortBy?: SortBy) => PriceWithBusiness[];
+  // Búsqueda. sortBy 'distance' solo tiene efecto si hay ubicación.
+  // locationOverride permite pasar coords recién obtenidas sin esperar a que
+  // el estado del context se propague (evita un stale closure en el primer
+  // "ordenar por cercanía" después de otorgar el permiso).
+  searchPrices: (term: string, sortBy?: SortBy, locationOverride?: Coords | null) => PriceWithBusiness[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -306,8 +309,15 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     await refresh();
   };
 
-  const searchPrices = (term: string, sortBy: SortBy = 'price'): PriceWithBusiness[] => {
+  const searchPrices = (
+    term: string,
+    sortBy: SortBy = 'price',
+    locationOverride?: Coords | null
+  ): PriceWithBusiness[] => {
     if (!term.trim()) return [];
+
+    // Si nos pasan coords explícitas las usamos; si no, las del estado.
+    const loc = locationOverride !== undefined ? locationOverride : userLocation;
 
     const normalizedTerm = term.toLowerCase().trim();
     const matched = prices
@@ -319,8 +329,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         // Distancia: solo si tenemos la ubicación del usuario Y el comercio
         // tiene coordenadas cargadas.
         let distance: number | null = null;
-        if (userLocation && business.lat != null && business.lon != null) {
-          distance = distanceInMeters(userLocation, {
+        if (loc && business.lat != null && business.lon != null) {
+          distance = distanceInMeters(loc, {
             lat: business.lat,
             lon: business.lon,
           });
@@ -330,7 +340,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       })
       .filter((p): p is PriceWithBusiness => p !== null);
 
-    if (sortBy === 'distance' && userLocation) {
+    if (sortBy === 'distance' && loc) {
       // Ordenar por distancia. Los que no tienen distancia (sin coords) van al final.
       return matched.sort((a, b) => {
         if (a.distance == null && b.distance == null) return a.price - b.price;

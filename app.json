@@ -44,7 +44,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Precios al Toque usa tu ubicación para mostrarte los comercios y precios más cercanos."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

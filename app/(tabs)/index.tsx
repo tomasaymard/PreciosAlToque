@@ -57,10 +57,14 @@ export default function HomeScreen() {
   };
 
   const handleChangeSort = async (newSort: SortBy) => {
-    if (newSort === 'distance' && !userLocation) {
-      // Necesitamos la ubicación: la pedimos ahora
-      const coords = await requestLocation();
-      if (!coords) {
+    // Guardamos las coords en una variable local: si acabamos de pedir la
+    // ubicación, el estado del context todavía no llegó a este render
+    // (stale closure). Pasarla explícita evita que el primer toque en
+    // "Cercanía" no reordene nada.
+    let loc = userLocation;
+    if (newSort === 'distance' && !loc) {
+      loc = await requestLocation();
+      if (!loc) {
         Alert.alert(
           'Ubicación no disponible',
           'Para ordenar por cercanía necesitamos acceso a tu ubicación. Podés activarlo en los permisos de la app.'
@@ -71,7 +75,7 @@ export default function HomeScreen() {
     setSortBy(newSort);
     // Re-buscar con el nuevo orden si ya hay una búsqueda activa
     if (searchTerm.trim()) {
-      setResults(searchPrices(searchTerm, newSort));
+      setResults(searchPrices(searchTerm, newSort, loc));
     }
   };
 
@@ -147,11 +151,13 @@ export default function HomeScreen() {
           </ThemedView>
         ) : results.length > 0 ? (
           <ThemedView style={styles.priceResults}>
-            {results.map((item, index) => (
+            {results.map((item) => (
               <PriceCard
                 key={item.id}
                 item={item}
-                isBestPrice={index === 0}
+                // El resaltado amarillo marca al MÁS BARATO, sin importar el
+                // orden elegido (por cercanía el primero puede no ser el más barato)
+                isBestPrice={item.price === Math.min(...results.map((r) => r.price))}
               />
             ))}
           </ThemedView>
