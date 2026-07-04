@@ -136,12 +136,14 @@ export default function MapHomeScreen() {
         onPress={() => setSelected(null)}
       >
         {businessesWithCoords.map((b) => {
-          // Android colapsa el ancho de las vistas custom dentro de un Marker
-          // y recorta el texto ("Panadería El Sol" → "Pana"). El fix probado
-          // es darle un ancho explícito calculado según el largo del label.
+          // Android (y en especial la arquitectura nueva de RN) mide mal las
+          // vistas custom dentro de un Marker y recorta el texto. Defensa en
+          // capas: ancho Y alto explícitos, collapsable={false} para que
+          // Android no "aplane" la vista, y allowFontScaling={false} para que
+          // el tamaño de letra del sistema no desborde el ancho calculado.
           const label =
             b.name.length > 18 ? b.name.slice(0, 17).trimEnd() + '…' : b.name;
-          const pillWidth = Math.min(Math.max(label.length * 7.5 + 26, 64), 175);
+          const pillWidth = Math.min(Math.max(Math.ceil(label.length * 8) + 28, 70), 185);
           return (
             <Marker
               key={b.id}
@@ -153,13 +155,16 @@ export default function MapHomeScreen() {
               }}
             >
               <View
+                collapsable={false}
                 style={[
                   styles.markerPill,
-                  { width: pillWidth },
+                  { width: pillWidth, height: 28 },
                   selected?.id === b.id && styles.markerPillSelected,
                 ]}
               >
-                <Text style={styles.markerText}>{label}</Text>
+                <Text style={styles.markerText} allowFontScaling={false} numberOfLines={1}>
+                  {label}
+                </Text>
               </View>
             </Marker>
           );
@@ -289,11 +294,10 @@ const styles = StyleSheet.create({
   markerPill: {
     backgroundColor: Brand.primary,
     borderRadius: Radius.sm + 2,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
     borderWidth: 1.5,
     borderColor: '#ffffff',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   markerPillSelected: {
     backgroundColor: Brand.primaryDark,
