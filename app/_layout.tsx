@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import {
   useFonts,
@@ -30,7 +31,10 @@ export default function RootLayout() {
     Nunito_700Bold,
   });
 
-  if (!fontsLoaded) {
+  // En nativo esperamos las fuentes (evita el "flash" de letra del sistema).
+  // En web NO bloqueamos: el servidor nunca "carga" fuentes y dejaría el HTML
+  // vacío; el navegador muestra la letra del sistema un instante y cambia.
+  if (!fontsLoaded && Platform.OS !== 'web') {
     return null;
   }
 

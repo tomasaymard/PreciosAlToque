@@ -1,9 +1,23 @@
+// Pestaña Buscar: búsqueda de un producto y comparación de precios entre
+// comercios, ordenable por precio o cercanía. Look del sistema de diseño
+// (Brand + Nunito), estructura según el mockup aprobado.
+
 import React, { useState } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, RefreshControl } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import {
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  RefreshControl,
+  View,
+  Text,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
+
 import { useApp, PriceWithBusiness, SortBy } from '@/contexts/AppContext';
+import { Brand, Type, Radius, Spacing } from '@/constants/theme';
 import { formatDistance } from '@/lib/geo';
 
 interface PriceCardProps {
@@ -15,32 +29,45 @@ function formatUpdatedAt(iso: string): string {
   const date = new Date(iso);
   const diffMs = Date.now() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'Hace instantes';
-  if (diffMin < 60) return `Hace ${diffMin} min`;
+  if (diffMin < 1) return 'hace instantes';
+  if (diffMin < 60) return `hace ${diffMin} min`;
   const diffHs = Math.floor(diffMin / 60);
-  if (diffHs < 24) return `Hace ${diffHs} h`;
+  if (diffHs < 24) return `hace ${diffHs} h`;
   const diffDays = Math.floor(diffHs / 24);
-  if (diffDays < 30) return `Hace ${diffDays} d`;
+  if (diffDays < 30) return `hace ${diffDays} d`;
   return date.toLocaleDateString('es-AR');
 }
 
 const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice }) => (
-  <ThemedView style={[styles.storeCard, isBestPrice && styles.bestPrice]}>
-    <ThemedView style={styles.namePrice}>
-      <ThemedText style={styles.storeName}>{item.business.name}</ThemedText>
-      <ThemedText style={styles.price}>${item.price.toLocaleString('es-AR')} {item.unit}</ThemedText>
-    </ThemedView>
-    <ThemedView style={styles.meta}>
-      <ThemedText style={styles.address}>{item.business.address || 'Sin dirección'}</ThemedText>
-      {item.distance != null && (
-        <ThemedText style={styles.distance}>📍 a {formatDistance(item.distance)}</ThemedText>
-      )}
-    </ThemedView>
-    <ThemedText style={styles.updatedTime}>Actualizado: {formatUpdatedAt(item.updated_at)}</ThemedText>
-  </ThemedView>
+  <View style={[styles.card, isBestPrice && styles.cardBest]}>
+    {isBestPrice && (
+      <View style={styles.bestBadge}>
+        <Text style={styles.bestBadgeText}>Mejor precio</Text>
+      </View>
+    )}
+    <View style={styles.cardRow}>
+      <Text style={[styles.cardName, isBestPrice && styles.cardNameBest]} numberOfLines={1}>
+        {item.business.name}
+      </Text>
+      <Text style={[styles.cardPrice, isBestPrice && styles.cardPriceBest]}>
+        ${item.price.toLocaleString('es-AR')}
+      </Text>
+    </View>
+    <View style={styles.cardRow}>
+      <Text style={styles.cardMeta} numberOfLines={1}>
+        {item.business.address || 'Sin dirección'}
+        {item.distance != null ? ` · a ${formatDistance(item.distance)}` : ''}
+      </Text>
+      <Text style={styles.cardMeta}>{item.unit}</Text>
+    </View>
+    <View style={styles.cardFooter}>
+      <Ionicons name="time-outline" size={13} color={Brand.textMuted} />
+      <Text style={styles.cardUpdated}>Actualizado {formatUpdatedAt(item.updated_at)}</Text>
+    </View>
+  </View>
 );
 
-export default function HomeScreen() {
+export default function SearchScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<PriceWithBusiness[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +76,7 @@ export default function HomeScreen() {
 
   const handleSearch = (overrideSort?: SortBy) => {
     if (!searchTerm.trim()) {
-      Alert.alert('Atención', 'Por favor ingresá un producto para buscar.');
+      Alert.alert('Atención', 'Ingresá un producto para buscar.');
       return;
     }
     const searchResults = searchPrices(searchTerm, overrideSort ?? sortBy);
@@ -57,10 +84,8 @@ export default function HomeScreen() {
   };
 
   const handleChangeSort = async (newSort: SortBy) => {
-    // Guardamos las coords en una variable local: si acabamos de pedir la
-    // ubicación, el estado del context todavía no llegó a este render
-    // (stale closure). Pasarla explícita evita que el primer toque en
-    // "Cercanía" no reordene nada.
+    // Coords en variable local para evitar el stale closure del primer
+    // "ordenar por cercanía" después de otorgar el permiso.
     let loc = userLocation;
     if (newSort === 'distance' && !loc) {
       loc = await requestLocation();
@@ -73,7 +98,6 @@ export default function HomeScreen() {
       }
     }
     setSortBy(newSort);
-    // Re-buscar con el nuevo orden si ya hay una búsqueda activa
     if (searchTerm.trim()) {
       setResults(searchPrices(searchTerm, newSort, loc));
     }
@@ -82,7 +106,6 @@ export default function HomeScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await refresh();
-    // Si había una búsqueda activa, la repetimos con los datos frescos
     if (searchTerm.trim()) {
       setResults(searchPrices(searchTerm, sortBy));
     }
@@ -95,96 +118,98 @@ export default function HomeScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
     >
       {/* Header */}
-      <ThemedView style={styles.header}>
-        <ThemedText style={styles.headerTitle}>🛒 Precios al Toque</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>
-          Encontrá el mejor precio cerca tuyo. Tu herramienta contra la inflación.
-        </ThemedText>
-      </ThemedView>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Buscar precios</Text>
+        <Text style={styles.headerSubtitle}>
+          Compará entre los comercios de tu zona y encontrá el más barato.
+        </Text>
+      </View>
 
-      {/* Search Section */}
-      <ThemedView style={styles.searchSection}>
-        <TextInput
-          style={styles.productInput}
-          placeholder="Ej: Bananas, Leche, Pan, etc."
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-          placeholderTextColor="#666"
-          returnKeyType="search"
-          onSubmitEditing={() => handleSearch()}
-        />
+      {/* Buscador */}
+      <View style={styles.searchSection}>
+        <View style={styles.inputWrapper}>
+          <Ionicons name="search-outline" size={18} color={Brand.textMuted} />
+          <TextInput
+            style={styles.productInput}
+            placeholder="Ej: bananas, leche, pan"
+            value={searchTerm}
+            onChangeText={setSearchTerm}
+            placeholderTextColor={Brand.textMuted}
+            returnKeyType="search"
+            onSubmitEditing={() => handleSearch()}
+          />
+        </View>
         <TouchableOpacity style={styles.searchButton} onPress={() => handleSearch()}>
-          <ThemedText style={styles.searchButtonText}>Buscar Precios</ThemedText>
+          <Text style={styles.searchButtonText}>Buscar precios</Text>
         </TouchableOpacity>
 
-        {/* Toggle de orden */}
-        <ThemedView style={styles.sortRow}>
-          <ThemedText style={styles.sortLabel}>Ordenar por:</ThemedText>
+        {/* Orden */}
+        <View style={styles.sortRow}>
+          <Text style={styles.sortLabel}>Ordenar:</Text>
           <TouchableOpacity
-            style={[styles.sortButton, sortBy === 'price' && styles.sortButtonActive]}
+            style={[styles.chip, sortBy === 'price' && styles.chipActive]}
             onPress={() => handleChangeSort('price')}
           >
-            <ThemedText style={[styles.sortButtonText, sortBy === 'price' && styles.sortButtonTextActive]}>
-              💲 Precio
-            </ThemedText>
+            <Text style={[styles.chipText, sortBy === 'price' && styles.chipTextActive]}>
+              Precio
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.sortButton, sortBy === 'distance' && styles.sortButtonActive]}
+            style={[styles.chip, sortBy === 'distance' && styles.chipActive]}
             onPress={() => handleChangeSort('distance')}
           >
-            <ThemedText style={[styles.sortButtonText, sortBy === 'distance' && styles.sortButtonTextActive]}>
-              📍 Cercanía
-            </ThemedText>
+            <Text style={[styles.chipText, sortBy === 'distance' && styles.chipTextActive]}>
+              Cercanía
+            </Text>
           </TouchableOpacity>
-        </ThemedView>
-      </ThemedView>
+        </View>
+      </View>
 
-      {/* Results Section */}
-      <ThemedView style={styles.resultsSection}>
-        <ThemedText style={styles.resultsTitle}>
-          Resultados para: <ThemedText style={styles.searchTermDisplay}>{searchTerm.toUpperCase()}</ThemedText>
-        </ThemedText>
+      {/* Resultados */}
+      <View style={styles.resultsSection}>
+        {searchTerm.trim() !== '' && (
+          <Text style={styles.resultsTitle}>
+            Resultados para <Text style={styles.resultsTerm}>{searchTerm.trim()}</Text>
+          </Text>
+        )}
 
         {loading ? (
-          <ThemedView style={styles.placeholder}>
-            <ThemedText style={styles.placeholderText}>Cargando precios...</ThemedText>
-          </ThemedView>
+          <View style={styles.placeholder}>
+            <Text style={styles.placeholderText}>Cargando precios...</Text>
+          </View>
         ) : results.length > 0 ? (
-          <ThemedView style={styles.priceResults}>
+          <View style={styles.results}>
             {results.map((item) => (
               <PriceCard
                 key={item.id}
                 item={item}
-                // El resaltado amarillo marca al MÁS BARATO, sin importar el
-                // orden elegido (por cercanía el primero puede no ser el más barato)
                 isBestPrice={item.price === Math.min(...results.map((r) => r.price))}
               />
             ))}
-          </ThemedView>
+          </View>
         ) : searchTerm ? (
-          <ThemedView style={styles.placeholder}>
-            <ThemedText style={styles.placeholderText}>
-              😔 No se encontraron precios para &quot;{searchTerm}&quot;.
-            </ThemedText>
-          </ThemedView>
+          <View style={styles.placeholder}>
+            <Text style={styles.placeholderText}>
+              No encontramos precios para “{searchTerm}”. Probá con otro nombre.
+            </Text>
+          </View>
         ) : (
-          <ThemedView style={styles.placeholder}>
-            <ThemedText style={styles.placeholderText}>
-              Ingresá un producto y tocá Buscar. Deslizá hacia abajo para actualizar.
-            </ThemedText>
-          </ThemedView>
+          <View style={styles.placeholder}>
+            <Ionicons name="pricetags-outline" size={26} color={Brand.textMuted} />
+            <Text style={styles.placeholderText}>
+              Escribí un producto y tocá Buscar. Deslizá hacia abajo para actualizar los datos.
+            </Text>
+          </View>
         )}
-      </ThemedView>
+      </View>
 
-      {/* Footer */}
-      <ThemedView style={styles.footer}>
-        <ThemedText style={styles.footerText}>
-          © 2026 Precios al Toque. Datos cargados por vecinos y comercios.
-        </ThemedText>
-        <Link href="/login" style={styles.loginLink}>
-          <ThemedText style={styles.loginLinkText}>¿Tenés un comercio? Sumalo acá</ThemedText>
+      {/* Pie */}
+      <View style={styles.footer}>
+        <Link href="/login">
+          <Text style={styles.merchantLink}>¿Tenés un comercio? Sumalo acá</Text>
         </Link>
-      </ThemedView>
+        <Text style={styles.footerText}>Datos cargados por vecinos y comercios.</Text>
+      </View>
     </ScrollView>
   );
 }
@@ -192,239 +217,205 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f4f7f9',
+    backgroundColor: Brand.background,
   },
   header: {
-    backgroundColor: '#007bff',
-    padding: 20,
-    alignItems: 'center',
+    backgroundColor: Brand.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xxl + Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
   headerTitle: {
+    fontFamily: Type.bold,
     fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'center',
+    color: '#ffffff',
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: 'white',
-    fontStyle: 'italic',
-    opacity: 0.9,
-    textAlign: 'center',
-    marginTop: 5,
+    fontFamily: Type.regular,
+    fontSize: 13,
+    color: Brand.primaryFaint,
+    marginTop: 2,
   },
   searchSection: {
-    backgroundColor: 'white',
-    margin: 20,
-    padding: 20,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 3.84,
-    elevation: 5,
+    backgroundColor: Brand.surface,
+    margin: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1.5,
+    borderColor: Brand.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
   },
   productInput: {
-    borderWidth: 2,
-    borderColor: '#ccc',
-    borderRadius: 4,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 10,
-    color: '#333',
+    flex: 1,
+    paddingVertical: Spacing.md,
+    fontFamily: Type.regular,
+    fontSize: 15,
+    color: Brand.textPrimary,
   },
   searchButton: {
-    backgroundColor: '#28a745',
-    padding: 12,
-    borderRadius: 4,
+    backgroundColor: Brand.primary,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
     alignItems: 'center',
   },
   searchButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontFamily: Type.semibold,
+    fontSize: 15,
+    color: '#ffffff',
   },
   sortRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    gap: 8,
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
   },
   sortLabel: {
-    fontSize: 13,
-    color: '#6c757d',
+    fontFamily: Type.regular,
+    fontSize: 12.5,
+    color: Brand.textMuted,
   },
-  sortButton: {
+  chip: {
     paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: '#ccc',
-    backgroundColor: 'white',
+    borderColor: Brand.border,
+    backgroundColor: Brand.surface,
   },
-  sortButtonActive: {
-    backgroundColor: '#007bff',
-    borderColor: '#007bff',
+  chipActive: {
+    backgroundColor: Brand.primary,
+    borderColor: Brand.primary,
   },
-  sortButtonText: {
-    fontSize: 13,
-    color: '#555',
+  chipText: {
+    fontFamily: Type.regular,
+    fontSize: 12.5,
+    color: Brand.textSecondary,
   },
-  sortButtonTextActive: {
-    color: 'white',
-    fontWeight: 'bold',
+  chipTextActive: {
+    fontFamily: Type.semibold,
+    color: '#ffffff',
   },
   resultsSection: {
-    marginHorizontal: 20,
-    marginBottom: 20,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
   },
   resultsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#007bff',
-    marginBottom: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#e0e0e0',
-    paddingBottom: 10,
+    fontFamily: Type.regular,
+    fontSize: 14,
+    color: Brand.textSecondary,
+    marginBottom: Spacing.md,
   },
-  searchTermDisplay: {
-    fontWeight: 'bold',
+  resultsTerm: {
+    fontFamily: Type.bold,
+    color: Brand.textPrimary,
   },
-  priceResults: {
-    gap: 15,
+  results: {
+    gap: Spacing.md,
   },
-  storeCard: {
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 6,
-    borderLeftWidth: 5,
-    borderLeftColor: '#007bff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 3.84,
-    elevation: 5,
+  card: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
   },
-  bestPrice: {
-    borderLeftColor: '#ffc107',
-    borderWidth: 1,
-    borderColor: '#ffc107',
-    backgroundColor: '#fffbe6',
+  cardBest: {
+    borderWidth: 2,
+    borderColor: Brand.primaryLight,
+    backgroundColor: Brand.primaryFaint,
   },
-  namePrice: {
+  bestBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: Brand.primary,
+    borderRadius: Radius.xl,
+    paddingVertical: 3,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  bestBadgeText: {
+    fontFamily: Type.semibold,
+    fontSize: 10.5,
+    color: '#ffffff',
+  },
+  cardRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: Spacing.md,
+  },
+  cardName: {
+    fontFamily: Type.semibold,
+    fontSize: 15,
+    color: Brand.textPrimary,
+    flex: 1,
+  },
+  cardNameBest: {
+    color: Brand.primaryDark,
+  },
+  cardPrice: {
+    fontFamily: Type.bold,
+    fontSize: 20,
+    color: Brand.textPrimary,
+  },
+  cardPriceBest: {
+    color: Brand.primaryDark,
+  },
+  cardMeta: {
+    fontFamily: Type.regular,
+    fontSize: 12,
+    color: Brand.textSecondary,
+    marginTop: 2,
+  },
+  cardFooter: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
+    gap: 4,
+    marginTop: Spacing.sm,
   },
-  storeName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  price: {
-    fontSize: 18,
-    color: '#dc3545',
-    fontWeight: 'bold',
-  },
-  meta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  address: {
-    fontSize: 12,
-    color: '#6c757d',
-    flex: 1,
-  },
-  distance: {
-    fontSize: 12,
-    color: '#007bff',
-    fontWeight: 'bold',
-  },
-  updatedTime: {
-    fontSize: 12,
-    color: '#6c757d',
-    marginTop: 4,
+  cardUpdated: {
+    fontFamily: Type.regular,
+    fontSize: 11.5,
+    color: Brand.textMuted,
   },
   placeholder: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 4,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: Brand.surface,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   placeholderText: {
-    fontStyle: 'italic',
-    color: '#666',
+    fontFamily: Type.regular,
+    fontSize: 13.5,
+    color: Brand.textMuted,
     textAlign: 'center',
-  },
-  mapSection: {
-    margin: 20,
-  },
-  mapTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#007bff',
-    marginBottom: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#e0e0e0',
-    paddingBottom: 10,
-  },
-  mapContainer: {
-    height: 200,
-    backgroundColor: '#e9ecef',
-    borderWidth: 1,
-    borderColor: '#ced4da',
-    borderRadius: 8,
-    marginBottom: 10,
-    overflow: 'hidden',
-  },
-  mapView: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapPlaceholder: {
-    fontSize: 16,
-    color: '#6c757d',
-    fontWeight: 'bold',
-  },
-  mapLegend: {
-    fontSize: 12,
-    color: '#6c757d',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    lineHeight: 20,
   },
   footer: {
-    marginTop: 20,
-    padding: 15,
-    backgroundColor: '#333',
     alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    gap: Spacing.xs,
+  },
+  merchantLink: {
+    fontFamily: Type.semibold,
+    fontSize: 13.5,
+    color: Brand.primary,
+    textDecorationLine: 'underline',
   },
   footerText: {
-    fontSize: 12,
-    color: '#aaa',
-    textAlign: 'center',
-    marginBottom: 5,
-  },
-  loginLink: {
-    textDecorationLine: 'underline',
-  },
-  loginLinkText: {
-    color: '#aaa',
-    fontSize: 12,
-    textDecorationLine: 'underline',
+    fontFamily: Type.regular,
+    fontSize: 11.5,
+    color: Brand.textMuted,
   },
 });

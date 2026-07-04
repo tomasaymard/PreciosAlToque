@@ -4,6 +4,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router, Link } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
+import { Brand, Type, Radius } from '@/constants/theme';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -40,7 +41,7 @@ export default function LoginScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedView style={styles.loginContainer}>
-        <ThemedText style={styles.title}>Acceso para Comercios</ThemedText>
+        <ThemedText style={styles.title}>Acceso para comercios</ThemedText>
 
         <ThemedView style={styles.formGroup}>
           <ThemedText style={styles.label}>Email</ThemedText>
@@ -49,7 +50,7 @@ export default function LoginScreen() {
             value={email}
             onChangeText={setEmail}
             placeholder="tu@email.com"
-            placeholderTextColor="#999"
+            placeholderTextColor={Brand.textMuted}
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
@@ -64,7 +65,7 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             placeholder="Ingresá tu contraseña"
-            placeholderTextColor="#999"
+            placeholderTextColor={Brand.textMuted}
             secureTextEntry
             autoComplete="password"
             editable={!isLoading}
@@ -96,27 +97,21 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f4f7f9',
+    backgroundColor: Brand.background,
     justifyContent: 'center',
     padding: 20,
   },
   loginContainer: {
-    backgroundColor: 'white',
-    padding: 40,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
-    elevation: 15,
+    backgroundColor: Brand.surface,
+    padding: 32,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#007bff',
+    fontFamily: Type.bold,
+    color: Brand.textPrimary,
     textAlign: 'center',
     marginBottom: 30,
   },
@@ -125,32 +120,33 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#555',
+    fontFamily: Type.semibold,
+    color: Brand.textSecondary,
     marginBottom: 5,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: Brand.border,
+    borderRadius: Radius.md,
     padding: 12,
     fontSize: 16,
-    color: '#333',
+    fontFamily: Type.regular,
+    color: Brand.textPrimary,
   },
   loginButton: {
-    backgroundColor: '#007bff',
-    padding: 12,
-    borderRadius: 4,
+    backgroundColor: Brand.primary,
+    padding: 14,
+    borderRadius: Radius.md,
     alignItems: 'center',
     marginTop: 10,
   },
   loginButtonDisabled: {
-    backgroundColor: '#6c757d',
+    backgroundColor: Brand.textMuted,
   },
   loginButtonText: {
-    color: 'white',
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontFamily: Type.semibold,
   },
   signupLink: {
     marginTop: 20,
@@ -158,8 +154,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   signupLinkText: {
-    color: '#007bff',
+    color: Brand.primary,
     fontSize: 14,
+    fontFamily: Type.semibold,
     textDecorationLine: 'underline',
   },
 });

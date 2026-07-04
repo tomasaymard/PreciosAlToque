@@ -5,6 +5,7 @@ import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { useApp, Price } from '@/contexts/AppContext';
+import { Brand, Type, Radius } from '@/constants/theme';
 
 export default function AdminScreen() {
   const [productName, setProductName] = useState('');
@@ -198,7 +199,7 @@ export default function AdminScreen() {
               value={productName}
               onChangeText={setProductName}
               placeholder="Ingrese el nombre del producto"
-              placeholderTextColor="#999"
+              placeholderTextColor={Brand.textMuted}
               editable={!isLoading}
             />
           </ThemedView>
@@ -210,7 +211,7 @@ export default function AdminScreen() {
               value={productPrice}
               onChangeText={setProductPrice}
               placeholder="Ingrese el precio"
-              placeholderTextColor="#999"
+              placeholderTextColor={Brand.textMuted}
               keyboardType="numeric"
               editable={!isLoading}
             />
@@ -296,7 +297,7 @@ export default function AdminScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f4f7f9',
+    backgroundColor: Brand.background,
   },
   adminContainer: {
     margin: 20,
@@ -314,11 +315,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#dc3545',
+    fontFamily: Type.bold,
+    color: Brand.textPrimary,
     textAlign: 'center',
     borderBottomWidth: 2,
-    borderBottomColor: '#dc3545',
+    borderBottomColor: Brand.primary,
     paddingBottom: 10,
     marginBottom: 20,
   },
@@ -326,7 +327,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 25,
-    color: '#555',
+    color: Brand.textSecondary,
   },
   locationBox: {
     borderRadius: 8,
@@ -335,20 +336,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   locationBoxOk: {
-    backgroundColor: '#E1F5EE',
-    borderColor: '#1D9E75',
+    backgroundColor: Brand.primaryFaint,
+    borderColor: Brand.primaryLight,
   },
   locationBoxMissing: {
-    backgroundColor: '#FAEEDA',
-    borderColor: '#EF9F27',
+    backgroundColor: Brand.accentFaint,
+    borderColor: Brand.accent,
   },
   locationText: {
     fontSize: 13,
-    color: '#444',
+    color: Brand.textSecondary,
     marginBottom: 10,
   },
   locationButton: {
-    backgroundColor: '#0F6E56',
+    backgroundColor: Brand.primary,
     borderRadius: 6,
     paddingVertical: 10,
     alignItems: 'center',
@@ -367,34 +368,34 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#555',
+    color: Brand.textSecondary,
     marginBottom: 5,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: Brand.border,
     borderRadius: 4,
     padding: 10,
     fontSize: 16,
-    color: '#333',
+    color: Brand.textPrimary,
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: Brand.border,
     borderRadius: 4,
   },
   picker: {
     height: 50,
   },
   submitButton: {
-    backgroundColor: '#007bff',
+    backgroundColor: Brand.primary,
     padding: 12,
     borderRadius: 4,
     alignItems: 'center',
     marginTop: 10,
   },
   submitButtonDisabled: {
-    backgroundColor: '#6c757d',
+    backgroundColor: Brand.textMuted,
   },
   submitButtonText: {
     color: 'white',
@@ -410,7 +411,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: Brand.textPrimary,
     marginBottom: 15,
   },
   productList: {
@@ -432,19 +433,19 @@ const styles = StyleSheet.create({
   productNameText: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#333',
+    color: Brand.textPrimary,
   },
   productPriceText: {
     fontSize: 14,
-    color: '#007bff',
+    color: Brand.primary,
     fontWeight: 'bold',
   },
   productUpdated: {
     fontSize: 12,
-    color: '#6c757d',
+    color: Brand.textMuted,
   },
   deleteButton: {
-    backgroundColor: '#dc3545',
+    backgroundColor: Brand.danger,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 3,
@@ -457,11 +458,11 @@ const styles = StyleSheet.create({
   emptyList: {
     textAlign: 'center',
     fontStyle: 'italic',
-    color: '#999',
+    color: Brand.textMuted,
     padding: 20,
   },
   logoutButton: {
-    backgroundColor: '#f0ad4e',
+    backgroundColor: Brand.accent,
     padding: 12,
     borderRadius: 4,
     alignItems: 'center',
@@ -477,7 +478,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   backButtonText: {
-    color: '#007bff',
+    color: Brand.primary,
     fontSize: 14,
     fontWeight: 'bold',
     textDecorationLine: 'underline',

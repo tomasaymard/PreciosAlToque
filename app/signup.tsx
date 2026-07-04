@@ -16,6 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { Coords } from '@/lib/geo';
+import { Brand, Type, Radius } from '@/constants/theme';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -95,7 +96,7 @@ export default function SignupScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <ThemedView style={styles.signupContainer}>
-        <ThemedText style={styles.title}>Registrá tu Comercio</ThemedText>
+        <ThemedText style={styles.title}>Registrá tu comercio</ThemedText>
         <ThemedText style={styles.subtitle}>
           Los datos de tu comercio van a ser visibles para todos los vecinos que busquen precios.
         </ThemedText>
@@ -107,7 +108,7 @@ export default function SignupScreen() {
             value={email}
             onChangeText={setEmail}
             placeholder="tu@email.com"
-            placeholderTextColor="#999"
+            placeholderTextColor={Brand.textMuted}
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
@@ -122,7 +123,7 @@ export default function SignupScreen() {
             value={password}
             onChangeText={setPassword}
             placeholder="Elegí una contraseña"
-            placeholderTextColor="#999"
+            placeholderTextColor={Brand.textMuted}
             secureTextEntry
             editable={!isLoading}
           />
@@ -135,7 +136,7 @@ export default function SignupScreen() {
             value={businessName}
             onChangeText={setBusinessName}
             placeholder="Ej: Verdulería Don Pepe"
-            placeholderTextColor="#999"
+            placeholderTextColor={Brand.textMuted}
             editable={!isLoading}
           />
         </ThemedView>
@@ -147,7 +148,7 @@ export default function SignupScreen() {
             value={address}
             onChangeText={setAddress}
             placeholder="Ej: Av. Corrientes 3000"
-            placeholderTextColor="#999"
+            placeholderTextColor={Brand.textMuted}
             editable={!isLoading}
           />
         </ThemedView>
@@ -197,7 +198,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f4f7f9',
+    backgroundColor: Brand.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -205,82 +206,82 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   signupContainer: {
-    backgroundColor: 'white',
-    padding: 30,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
-    elevation: 15,
+    backgroundColor: Brand.surface,
+    padding: 28,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
   },
   title: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#28a745',
+    fontFamily: Type.bold,
+    color: Brand.textPrimary,
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 13,
-    color: '#666',
+    fontFamily: Type.regular,
+    color: Brand.textSecondary,
     textAlign: 'center',
     marginBottom: 25,
-    fontStyle: 'italic',
   },
   formGroup: {
     marginBottom: 18,
   },
   label: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#555',
+    fontFamily: Type.semibold,
+    color: Brand.textSecondary,
     marginBottom: 5,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: Brand.border,
+    borderRadius: Radius.md,
     padding: 12,
     fontSize: 16,
-    color: '#333',
+    fontFamily: Type.regular,
+    color: Brand.textPrimary,
   },
   locationHint: {
     fontSize: 12,
-    color: '#888',
+    fontFamily: Type.regular,
+    color: Brand.textMuted,
     marginBottom: 8,
   },
   locationButton: {
-    borderWidth: 1,
-    borderColor: '#007bff',
-    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: Brand.primary,
+    borderRadius: Radius.md,
     padding: 12,
     alignItems: 'center',
-    backgroundColor: '#eaf3ff',
+    backgroundColor: Brand.primaryFaint,
   },
   locationButtonDone: {
-    borderColor: '#28a745',
-    backgroundColor: '#eafbef',
+    borderColor: Brand.primaryLight,
+    backgroundColor: Brand.primaryFaint,
   },
   locationButtonText: {
     fontSize: 14,
-    color: '#333',
+    fontFamily: Type.semibold,
+    color: Brand.primaryDark,
     textAlign: 'center',
   },
   signupButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: Brand.primary,
     padding: 14,
-    borderRadius: 4,
+    borderRadius: Radius.md,
     alignItems: 'center',
     marginTop: 10,
   },
   signupButtonDisabled: {
-    backgroundColor: '#6c757d',
+    backgroundColor: Brand.textMuted,
   },
   signupButtonText: {
-    color: 'white',
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontFamily: Type.semibold,
   },
   backLink: {
     marginTop: 20,
@@ -288,7 +289,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   backLinkText: {
-    color: '#007bff',
+    color: Brand.primary,
     fontSize: 14,
+    fontFamily: Type.semibold,
   },
 });
