@@ -135,23 +135,35 @@ export default function MapHomeScreen() {
         toolbarEnabled={false}
         onPress={() => setSelected(null)}
       >
-        {businessesWithCoords.map((b) => (
-          <Marker
-            key={b.id}
-            coordinate={{ latitude: b.lat!, longitude: b.lon! }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            onPress={(e) => {
-              e.stopPropagation();
-              focusBusiness(b);
-            }}
-          >
-            <View style={[styles.markerPill, selected?.id === b.id && styles.markerPillSelected]}>
-              <Text style={styles.markerText} numberOfLines={1}>
-                {b.name}
-              </Text>
-            </View>
-          </Marker>
-        ))}
+        {businessesWithCoords.map((b) => {
+          // Android colapsa el ancho de las vistas custom dentro de un Marker
+          // y recorta el texto ("Panadería El Sol" → "Pana"). El fix probado
+          // es darle un ancho explícito calculado según el largo del label.
+          const label =
+            b.name.length > 18 ? b.name.slice(0, 17).trimEnd() + '…' : b.name;
+          const pillWidth = Math.min(Math.max(label.length * 7.5 + 26, 64), 175);
+          return (
+            <Marker
+              key={b.id}
+              coordinate={{ latitude: b.lat!, longitude: b.lon! }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              onPress={(e) => {
+                e.stopPropagation();
+                focusBusiness(b);
+              }}
+            >
+              <View
+                style={[
+                  styles.markerPill,
+                  { width: pillWidth },
+                  selected?.id === b.id && styles.markerPillSelected,
+                ]}
+              >
+                <Text style={styles.markerText}>{label}</Text>
+              </View>
+            </Marker>
+          );
+        })}
       </MapView>
 
       {/* Buscador flotante */}
@@ -278,10 +290,10 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.primary,
     borderRadius: Radius.sm + 2,
     paddingVertical: 4,
-    paddingHorizontal: 10,
-    maxWidth: 140,
+    paddingHorizontal: 8,
     borderWidth: 1.5,
     borderColor: '#ffffff',
+    alignItems: 'center',
   },
   markerPillSelected: {
     backgroundColor: Brand.primaryDark,
@@ -291,6 +303,7 @@ const styles = StyleSheet.create({
     fontFamily: Type.semibold,
     fontSize: 12,
     color: '#ffffff',
+    textAlign: 'center',
   },
   locateFab: {
     position: 'absolute',
