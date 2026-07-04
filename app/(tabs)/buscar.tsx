@@ -67,12 +67,29 @@ const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice }) => (
   </View>
 );
 
+// Opciones del filtro de radio (en metros; null = sin límite)
+const RADIUS_OPTIONS: { label: string; value: number | null }[] = [
+  { label: 'Todos', value: null },
+  { label: '1 km', value: 1000 },
+  { label: '3 km', value: 3000 },
+  { label: '10 km', value: 10000 },
+];
+
 export default function SearchScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<PriceWithBusiness[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('price');
+  const [radius, setRadius] = useState<number | null>(null);
   const { searchPrices, refresh, loading, userLocation, requestLocation } = useApp();
+
+  // Resultados visibles según el radio elegido. Los que no tienen distancia
+  // (comercio sin coordenadas o sin permiso de ubicación) solo se muestran
+  // cuando el radio es "Todos".
+  const visibleResults =
+    radius == null
+      ? results
+      : results.filter((r) => r.distance != null && r.distance <= radius);
 
   const handleSearch = (overrideSort?: SortBy) => {
     if (!searchTerm.trim()) {
@@ -101,6 +118,26 @@ export default function SearchScreen() {
     if (searchTerm.trim()) {
       setResults(searchPrices(searchTerm, newSort, loc));
     }
+  };
+
+  const handleChangeRadius = async (newRadius: number | null) => {
+    // Para filtrar por radio necesitamos la ubicación (mismo patrón que Cercanía)
+    let loc = userLocation;
+    if (newRadius != null && !loc) {
+      loc = await requestLocation();
+      if (!loc) {
+        Alert.alert(
+          'Ubicación no disponible',
+          'Para filtrar por radio necesitamos acceso a tu ubicación. Podés activarlo en los permisos de la app.'
+        );
+        return;
+      }
+      // Recalcular distancias de la búsqueda activa con la ubicación recién obtenida
+      if (searchTerm.trim()) {
+        setResults(searchPrices(searchTerm, sortBy, loc));
+      }
+    }
+    setRadius(newRadius);
   };
 
   const handleRefresh = async () => {
@@ -163,6 +200,22 @@ export default function SearchScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Radio */}
+        <View style={styles.sortRow}>
+          <Text style={styles.sortLabel}>Radio:</Text>
+          {RADIUS_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.label}
+              style={[styles.chip, radius === opt.value && styles.chipActive]}
+              onPress={() => handleChangeRadius(opt.value)}
+            >
+              <Text style={[styles.chipText, radius === opt.value && styles.chipTextActive]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Resultados */}
@@ -177,15 +230,22 @@ export default function SearchScreen() {
           <View style={styles.placeholder}>
             <Text style={styles.placeholderText}>Cargando precios...</Text>
           </View>
-        ) : results.length > 0 ? (
+        ) : visibleResults.length > 0 ? (
           <View style={styles.results}>
-            {results.map((item) => (
+            {visibleResults.map((item) => (
               <PriceCard
                 key={item.id}
                 item={item}
-                isBestPrice={item.price === Math.min(...results.map((r) => r.price))}
+                isBestPrice={item.price === Math.min(...visibleResults.map((r) => r.price))}
               />
             ))}
+          </View>
+        ) : results.length > 0 && radius != null ? (
+          <View style={styles.placeholder}>
+            <Text style={styles.placeholderText}>
+              Hay precios para “{searchTerm}”, pero ninguno a menos de{' '}
+              {radius >= 1000 ? `${radius / 1000} km` : `${radius} m`}. Probá ampliando el radio.
+            </Text>
           </View>
         ) : searchTerm ? (
           <View style={styles.placeholder}>

@@ -304,7 +304,10 @@ const styles = StyleSheet.create({
     borderColor: Brand.accent,
   },
   markerText: {
-    fontFamily: Type.semibold,
+    // Letra del sistema a propósito: Android convierte el marcador en imagen
+    // apenas se crea, antes de que Nunito cargue — con fuente custom el texto
+    // sale vacío. La del sistema está disponible al instante.
+    fontWeight: '700',
     fontSize: 12,
     color: '#ffffff',
     textAlign: 'center',
