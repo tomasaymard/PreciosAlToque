@@ -27,6 +27,7 @@ export interface Business {
   address: string | null;
   lat: number | null;
   lon: number | null;
+  category: string | null;
   created_at: string;
 }
 
@@ -86,7 +87,8 @@ interface AppContextType {
     password: string,
     businessName: string,
     address: string,
-    coords?: Coords | null
+    coords?: Coords | null,
+    category?: string | null
   ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   /** Registro de cliente: cuenta sin comercio asociado, para puntuar y (a futuro) encargar */
   signUpClient: (
@@ -100,6 +102,8 @@ interface AppContextType {
   deletePrice: (priceId: string) => Promise<void>;
   /** Fija/actualiza la ubicación del comercio del usuario logueado */
   updateMyBusinessLocation: (coords: Coords) => Promise<void>;
+  /** Fija/actualiza el rubro del comercio del usuario logueado */
+  updateMyBusinessCategory: (category: string) => Promise<void>;
 
   // Puntuaciones (estrellas)
   /** Resumen de puntuación de un comercio (promedio, cantidad, mi voto) */
@@ -260,7 +264,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     password: string,
     businessName: string,
     address: string,
-    coords?: Coords | null
+    coords?: Coords | null,
+    category?: string | null
   ): Promise<{ error: string | null; needsEmailConfirmation: boolean }> => {
     // 1. Crear la cuenta de usuario en Supabase Auth
     const { data, error } = await supabase.auth.signUp({ email, password });
@@ -291,6 +296,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       address: address.trim() || null,
       lat: coords?.lat ?? null,
       lon: coords?.lon ?? null,
+      category: category ?? null,
     });
 
     if (businessError) {
@@ -375,6 +381,20 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const { error } = await supabase
       .from('businesses')
       .update({ lat: coords.lat, lon: coords.lon })
+      .eq('id', myBusiness.id);
+    if (error) {
+      throw new Error(error.message);
+    }
+    await refresh();
+  };
+
+  const updateMyBusinessCategory = async (category: string): Promise<void> => {
+    if (!myBusiness) {
+      throw new Error('No tenés un negocio asociado a tu cuenta.');
+    }
+    const { error } = await supabase
+      .from('businesses')
+      .update({ category })
       .eq('id', myBusiness.id);
     if (error) {
       throw new Error(error.message);
@@ -480,6 +500,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     upsertPrice,
     deletePrice,
     updateMyBusinessLocation,
+    updateMyBusinessCategory,
     getBusinessRating,
     rateBusiness,
     isMyBusiness,

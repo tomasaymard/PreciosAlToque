@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { useApp, Price } from '@/contexts/AppContext';
+import { CATEGORIES } from '@/lib/categories';
 import { Brand, Type, Radius } from '@/constants/theme';
 
 export default function AdminScreen() {
@@ -22,6 +24,7 @@ export default function AdminScreen() {
     upsertPrice,
     deletePrice,
     updateMyBusinessLocation,
+    updateMyBusinessCategory,
     requestLocation,
     signOut,
     loading,
@@ -188,6 +191,38 @@ export default function AdminScreen() {
                 : 'Usar mi ubicación actual (parate en tu comercio)'}
             </ThemedText>
           </TouchableOpacity>
+        </ThemedView>
+
+        {/* Rubro del comercio */}
+        <ThemedView style={styles.formGroup}>
+          <ThemedText style={styles.label}>Rubro</ThemedText>
+          <View style={styles.categoryGrid}>
+            {CATEGORIES.map((c) => {
+              const active = myBusiness.category === c.key;
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[styles.categoryChip, active && styles.categoryChipActive]}
+                  onPress={async () => {
+                    try {
+                      await updateMyBusinessCategory(c.key);
+                    } catch (e: any) {
+                      Alert.alert('Error', e?.message || 'No se pudo guardar el rubro.');
+                    }
+                  }}
+                >
+                  <Ionicons
+                    name={c.icon as any}
+                    size={15}
+                    color={active ? '#ffffff' : Brand.textSecondary}
+                  />
+                  <ThemedText style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                    {c.label}
+                  </ThemedText>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </ThemedView>
 
         {/* Formulario de carga */}
@@ -358,6 +393,34 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Brand.border,
+  },
+  categoryChipActive: {
+    backgroundColor: Brand.primary,
+    borderColor: Brand.primary,
+  },
+  categoryChipText: {
+    fontFamily: Type.regular,
+    fontSize: 12.5,
+    color: Brand.textSecondary,
+  },
+  categoryChipTextActive: {
+    fontFamily: Type.semibold,
+    color: '#ffffff',
   },
   formSection: {
     marginBottom: 30,

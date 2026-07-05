@@ -11,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { Coords } from '@/lib/geo';
+import { CATEGORIES } from '@/lib/categories';
 import { Brand, Type, Radius } from '@/constants/theme';
 
 type AccountType = 'client' | 'merchant';
@@ -21,6 +22,7 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
   const [coords, setCoords] = useState<Coords | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +64,7 @@ export default function SignupScreen() {
     try {
       const result =
         accountType === 'merchant'
-          ? await signUp(email.trim(), password, businessName, address, coords ?? userLocation)
+          ? await signUp(email.trim(), password, businessName, address, coords ?? userLocation, category)
           : await signUpClient(email.trim(), password);
 
       if (result.error) {
@@ -174,6 +176,32 @@ export default function SignupScreen() {
                 placeholderTextColor={Brand.textMuted}
                 editable={!isLoading}
               />
+            </ThemedView>
+
+            <ThemedView style={styles.formGroup}>
+              <ThemedText style={styles.label}>Rubro</ThemedText>
+              <View style={styles.categoryGrid}>
+                {CATEGORIES.map((c) => {
+                  const active = category === c.key;
+                  return (
+                    <TouchableOpacity
+                      key={c.key}
+                      style={[styles.categoryChip, active && styles.categoryChipActive]}
+                      onPress={() => setCategory(c.key)}
+                      disabled={isLoading}
+                    >
+                      <Ionicons
+                        name={c.icon as any}
+                        size={15}
+                        color={active ? '#ffffff' : Brand.textSecondary}
+                      />
+                      <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                        {c.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </ThemedView>
 
             <ThemedView style={styles.formGroup}>
@@ -289,6 +317,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Brand.textMuted,
     textAlign: 'center',
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Brand.border,
+  },
+  categoryChipActive: {
+    backgroundColor: Brand.primary,
+    borderColor: Brand.primary,
+  },
+  categoryChipText: {
+    fontFamily: Type.regular,
+    fontSize: 12.5,
+    color: Brand.textSecondary,
+  },
+  categoryChipTextActive: {
+    fontFamily: Type.semibold,
+    color: '#ffffff',
   },
   formGroup: {
     marginBottom: 18,

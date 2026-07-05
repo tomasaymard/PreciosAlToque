@@ -9,7 +9,7 @@
 //   uno (en el panel o en el mapa) se ven sus productos y precios
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, Alert, ScrollView } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp, Business } from '@/contexts/AppContext';
 import { Brand, Type, Radius, Spacing } from '@/constants/theme';
 import { distanceInMeters, formatDistance } from '@/lib/geo';
+import { CATEGORIES, categoryLabel } from '@/lib/categories';
 import { StarRating } from '@/components/star-rating';
 
 // Centro por defecto cuando no tenemos la ubicación del usuario (Obelisco, CABA)
@@ -62,14 +63,32 @@ export default function MapHomeScreen() {
     }
   };
 
-  const businessesWithCoords = useMemo(
-    () => businesses.filter((b) => b.lat != null && b.lon != null),
-    [businesses]
+  // Rubro seleccionado para filtrar (null = todos)
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+
+  // Comercios que pasan el filtro de rubro
+  const filteredBusinesses = useMemo(
+    () =>
+      categoryFilter
+        ? businesses.filter((b) => b.category === categoryFilter)
+        : businesses,
+    [businesses, categoryFilter]
   );
+
+  const businessesWithCoords = useMemo(
+    () => filteredBusinesses.filter((b) => b.lat != null && b.lon != null),
+    [filteredBusinesses]
+  );
+
+  // Rubros que efectivamente tienen algún comercio (para no mostrar chips vacíos)
+  const availableCategories = useMemo(() => {
+    const keys = new Set(businesses.map((b) => b.category).filter(Boolean) as string[]);
+    return CATEGORIES.filter((c) => keys.has(c.key));
+  }, [businesses]);
 
   // Comercios ordenados por cercanía (los sin coordenadas van al final)
   const nearby = useMemo(() => {
-    const withDistance = businesses.map((b) => ({
+    const withDistance = filteredBusinesses.map((b) => ({
       business: b,
       distance:
         userLocation && b.lat != null && b.lon != null
@@ -82,7 +101,7 @@ export default function MapHomeScreen() {
       if (b.distance == null) return -1;
       return a.distance - b.distance;
     });
-  }, [businesses, userLocation]);
+  }, [filteredBusinesses, userLocation]);
 
   const selectedPrices = useMemo(
     () => (selected ? prices.filter((p) => p.business_id === selected.id) : []),
@@ -210,6 +229,45 @@ export default function MapHomeScreen() {
         <Text style={styles.searchPlaceholder}>¿Qué producto buscás?</Text>
       </TouchableOpacity>
 
+      {/* Chips de rubro (solo si hay comercios con rubro cargado) */}
+      {availableCategories.length > 0 && (
+        <View style={[styles.chipsBar, { top: insets.top + Spacing.md + 56 }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsContent}
+          >
+            <TouchableOpacity
+              style={[styles.filterChip, categoryFilter === null && styles.filterChipActive]}
+              onPress={() => setCategoryFilter(null)}
+            >
+              <Text style={[styles.filterChipText, categoryFilter === null && styles.filterChipTextActive]}>
+                Todos
+              </Text>
+            </TouchableOpacity>
+            {availableCategories.map((c) => {
+              const active = categoryFilter === c.key;
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  onPress={() => setCategoryFilter(active ? null : c.key)}
+                >
+                  <Ionicons
+                    name={c.icon as any}
+                    size={14}
+                    color={active ? '#ffffff' : Brand.textSecondary}
+                  />
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                    {c.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Botón centrar en mí */}
       <TouchableOpacity
         style={[styles.locateFab, { bottom: selected ? 320 : 240 }]}
@@ -228,6 +286,9 @@ export default function MapHomeScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.panelTitle}>{selected.name}</Text>
                 <Text style={styles.panelSubtitle}>
+                  {categoryLabel(selected.category)
+                    ? `${categoryLabel(selected.category)} · `
+                    : ''}
                   {selected.address || 'Sin dirección'}
                   {userLocation && selected.lat != null && selected.lon != null
                     ? ` · a ${formatDistance(distanceInMeters(userLocation, { lat: selected.lat, lon: selected.lon }))}`
@@ -343,6 +404,43 @@ const styles = StyleSheet.create({
     fontFamily: Type.regular,
     fontSize: 14,
     color: Brand.textMuted,
+  },
+  chipsBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  chipsContent: {
+    paddingHorizontal: Spacing.lg,
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radius.xl,
+    backgroundColor: Brand.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Brand.border,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  filterChipActive: {
+    backgroundColor: Brand.primary,
+    borderColor: Brand.primary,
+  },
+  filterChipText: {
+    fontFamily: Type.semibold,
+    fontSize: 12.5,
+    color: Brand.textSecondary,
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
   },
   markerPill: {
     backgroundColor: Brand.primary,
