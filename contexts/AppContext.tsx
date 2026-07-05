@@ -39,6 +39,21 @@ export interface Price {
   updated_at: string;
 }
 
+export interface Rating {
+  id: string;
+  business_id: string;
+  user_id: string;
+  stars: number;
+  updated_at: string;
+}
+
+// Resumen de puntuación de un comercio, listo para mostrar
+export interface BusinessRating {
+  average: number | null; // null si nadie puntuó todavía
+  count: number;
+  myStars: number | null; // la puntuación del usuario logueado, si existe
+}
+
 // Resultado de búsqueda: precio + el negocio que lo cargó, todo en un objeto.
 // distance es la distancia en metros al usuario, o null si no tenemos su
 // ubicación o el comercio no tiene coordenadas cargadas.
@@ -73,6 +88,11 @@ interface AppContextType {
     address: string,
     coords?: Coords | null
   ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
+  /** Registro de cliente: cuenta sin comercio asociado, para puntuar y (a futuro) encargar */
+  signUpClient: (
+    email: string,
+    password: string
+  ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
 
   // CRUD de precios (solo el dueño del negocio puede; lo enforzan las RLS)
@@ -80,6 +100,14 @@ interface AppContextType {
   deletePrice: (priceId: string) => Promise<void>;
   /** Fija/actualiza la ubicación del comercio del usuario logueado */
   updateMyBusinessLocation: (coords: Coords) => Promise<void>;
+
+  // Puntuaciones (estrellas)
+  /** Resumen de puntuación de un comercio (promedio, cantidad, mi voto) */
+  getBusinessRating: (businessId: string) => BusinessRating;
+  /** Guarda/actualiza la puntuación del usuario logueado para un comercio */
+  rateBusiness: (businessId: string, stars: number) => Promise<void>;
+  /** true si el usuario logueado es el dueño de ese comercio (no puede autopuntuarse) */
+  isMyBusiness: (businessId: string) => boolean;
 
   // Ubicación del usuario
   userLocation: Coords | null;
@@ -108,6 +136,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
+  const [ratings, setRatings] = useState<Rating[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [userLocation, setUserLocation] = useState<Coords | null>(null);
   const [locationPermission, setLocationPermission] = useState<LocationPermission>('unknown');
@@ -119,12 +148,13 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     ? businesses.find((b) => b.owner_id === authUser.id) ?? null
     : null;
 
-  // Trae negocios y precios desde Supabase. Se llama al montar y después de
-  // cualquier cambio (login, signup, upsert, delete).
+  // Trae negocios, precios y puntuaciones desde Supabase. Se llama al montar y
+  // después de cualquier cambio (login, signup, upsert, delete, rate).
   const refresh = useCallback(async (): Promise<void> => {
-    const [businessesRes, pricesRes] = await Promise.all([
+    const [businessesRes, pricesRes, ratingsRes] = await Promise.all([
       supabase.from('businesses').select('*').order('name'),
       supabase.from('prices').select('*').order('updated_at', { ascending: false }),
+      supabase.from('ratings').select('*'),
     ]);
 
     if (businessesRes.error) {
@@ -137,6 +167,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
       console.error('Error cargando precios:', pricesRes.error.message);
     } else {
       setPrices(pricesRes.data || []);
+    }
+
+    // La tabla ratings puede no existir todavía (si no corrieron el SQL); no
+    // rompemos la app por eso, solo dejamos las puntuaciones vacías.
+    if (ratingsRes.error) {
+      console.warn('Puntuaciones no disponibles:', ratingsRes.error.message);
+    } else {
+      setRatings(ratingsRes.data || []);
     }
   }, []);
 
@@ -268,6 +306,22 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     return { error: null, needsEmailConfirmation: false };
   };
 
+  const signUpClient = async (
+    email: string,
+    password: string
+  ): Promise<{ error: string | null; needsEmailConfirmation: boolean }> => {
+    // Cuenta de cliente: solo crea el usuario, sin negocio asociado. Le sirve
+    // para puntuar comercios y, a futuro, encargar productos.
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      return { error: translateAuthError(error.message), needsEmailConfirmation: false };
+    }
+    if (!data.session) {
+      return { error: null, needsEmailConfirmation: true };
+    }
+    return { error: null, needsEmailConfirmation: false };
+  };
+
   const signOut = async (): Promise<void> => {
     await supabase.auth.signOut();
   };
@@ -328,6 +382,45 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     await refresh();
   };
 
+  // --- Puntuaciones ---
+
+  const isMyBusiness = (businessId: string): boolean => {
+    return !!authUser && businesses.some(
+      (b) => b.id === businessId && b.owner_id === authUser.id
+    );
+  };
+
+  const getBusinessRating = (businessId: string): BusinessRating => {
+    const forBusiness = ratings.filter((r) => r.business_id === businessId);
+    const count = forBusiness.length;
+    const average =
+      count > 0 ? forBusiness.reduce((sum, r) => sum + r.stars, 0) / count : null;
+    const mine = authUser
+      ? forBusiness.find((r) => r.user_id === authUser.id)
+      : undefined;
+    return { average, count, myStars: mine ? mine.stars : null };
+  };
+
+  const rateBusiness = async (businessId: string, stars: number): Promise<void> => {
+    if (!authUser) {
+      throw new Error('Tenés que iniciar sesión para puntuar.');
+    }
+    if (isMyBusiness(businessId)) {
+      throw new Error('No podés puntuar tu propio comercio.');
+    }
+    // Upsert por (business_id, user_id): si ya puntuó, actualiza; si no, inserta.
+    const { error } = await supabase
+      .from('ratings')
+      .upsert(
+        { business_id: businessId, user_id: authUser.id, stars },
+        { onConflict: 'business_id,user_id' }
+      );
+    if (error) {
+      throw new Error(error.message);
+    }
+    await refresh();
+  };
+
   const searchPrices = (
     term: string,
     sortBy: SortBy = 'price',
@@ -382,10 +475,14 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     myBusiness,
     signIn,
     signUp,
+    signUpClient,
     signOut,
     upsertPrice,
     deletePrice,
     updateMyBusinessLocation,
+    getBusinessRating,
+    rateBusiness,
+    isMyBusiness,
     userLocation,
     locationPermission,
     requestLocation,

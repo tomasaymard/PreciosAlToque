@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp, Business } from '@/contexts/AppContext';
 import { Brand, Type, Radius, Spacing } from '@/constants/theme';
 import { distanceInMeters, formatDistance } from '@/lib/geo';
+import { StarRating } from '@/components/star-rating';
 
 // Centro por defecto cuando no tenemos la ubicación del usuario (Obelisco, CABA)
 const DEFAULT_REGION = {
@@ -30,8 +31,36 @@ const DEFAULT_REGION = {
 export default function MapHomeScreen() {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const { businesses, prices, userLocation, requestLocation } = useApp();
+  const {
+    businesses,
+    prices,
+    userLocation,
+    requestLocation,
+    session,
+    getBusinessRating,
+    rateBusiness,
+    isMyBusiness,
+  } = useApp();
   const [selected, setSelected] = useState<Business | null>(null);
+
+  const handleRate = async (businessId: string, stars: number) => {
+    if (!session) {
+      Alert.alert(
+        'Necesitás una cuenta',
+        'Registrate como vecino (gratis) para puntuar comercios.',
+        [
+          { text: 'Ahora no', style: 'cancel' },
+          { text: 'Crear cuenta', onPress: () => router.push('/signup') },
+        ]
+      );
+      return;
+    }
+    try {
+      await rateBusiness(businessId, stars);
+    } catch (e: any) {
+      Alert.alert('No se pudo puntuar', e?.message || 'Probá de nuevo.');
+    }
+  };
 
   const businessesWithCoords = useMemo(
     () => businesses.filter((b) => b.lat != null && b.lon != null),
@@ -209,6 +238,30 @@ export default function MapHomeScreen() {
                 <Ionicons name="close" size={22} color={Brand.textMuted} />
               </TouchableOpacity>
             </View>
+
+            {/* Puntuación */}
+            {(() => {
+              const rating = getBusinessRating(selected.id);
+              const owner = isMyBusiness(selected.id);
+              return (
+                <View style={styles.ratingRow}>
+                  <StarRating value={rating.average} count={rating.count} size={16} />
+                  {!owner && (
+                    <View style={styles.rateInline}>
+                      <Text style={styles.rateLabel}>
+                        {rating.myStars ? 'Tu voto:' : 'Puntuá:'}
+                      </Text>
+                      <StarRating
+                        value={rating.myStars}
+                        onRate={(stars) => handleRate(selected.id, stars)}
+                        size={18}
+                      />
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+
             {selectedPrices.length > 0 ? (
               <FlatList
                 data={selectedPrices.slice(0, 6)}
@@ -368,6 +421,27 @@ const styles = StyleSheet.create({
     fontFamily: Type.regular,
     fontSize: 12,
     color: Brand.textSecondary,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Brand.border,
+  },
+  rateInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  rateLabel: {
+    fontFamily: Type.regular,
+    fontSize: 12,
+    color: Brand.textMuted,
   },
   businessRow: {
     flexDirection: 'row',

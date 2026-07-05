@@ -16,13 +16,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 
-import { useApp, PriceWithBusiness, SortBy } from '@/contexts/AppContext';
+import { useApp, PriceWithBusiness, SortBy, BusinessRating } from '@/contexts/AppContext';
 import { Brand, Type, Radius, Spacing } from '@/constants/theme';
 import { formatDistance } from '@/lib/geo';
+import { StarRating } from '@/components/star-rating';
 
 interface PriceCardProps {
   item: PriceWithBusiness;
   isBestPrice: boolean;
+  rating: BusinessRating;
 }
 
 function formatUpdatedAt(iso: string): string {
@@ -38,7 +40,7 @@ function formatUpdatedAt(iso: string): string {
   return date.toLocaleDateString('es-AR');
 }
 
-const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice }) => (
+const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice, rating }) => (
   <View style={[styles.card, isBestPrice && styles.cardBest]}>
     {isBestPrice && (
       <View style={styles.bestBadge}>
@@ -61,8 +63,11 @@ const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice }) => (
       <Text style={styles.cardMeta}>{item.unit}</Text>
     </View>
     <View style={styles.cardFooter}>
-      <Ionicons name="time-outline" size={13} color={Brand.textMuted} />
-      <Text style={styles.cardUpdated}>Actualizado {formatUpdatedAt(item.updated_at)}</Text>
+      <StarRating value={rating.average} count={rating.count} size={13} />
+      <View style={styles.cardFooterRight}>
+        <Ionicons name="time-outline" size={13} color={Brand.textMuted} />
+        <Text style={styles.cardUpdated}>{formatUpdatedAt(item.updated_at)}</Text>
+      </View>
     </View>
   </View>
 );
@@ -81,7 +86,7 @@ export default function SearchScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('price');
   const [radius, setRadius] = useState<number | null>(null);
-  const { searchPrices, refresh, loading, userLocation, requestLocation } = useApp();
+  const { searchPrices, refresh, loading, userLocation, requestLocation, getBusinessRating } = useApp();
 
   // Resultados visibles según el radio elegido. Los que no tienen distancia
   // (comercio sin coordenadas o sin permiso de ubicación) solo se muestran
@@ -237,6 +242,7 @@ export default function SearchScreen() {
                 key={item.id}
                 item={item}
                 isBestPrice={item.price === Math.min(...visibleResults.map((r) => r.price))}
+                rating={getBusinessRating(item.business.id)}
               />
             ))}
           </View>
@@ -438,8 +444,13 @@ const styles = StyleSheet.create({
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
     marginTop: Spacing.sm,
+  },
+  cardFooterRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   cardUpdated: {
     fontFamily: Type.regular,

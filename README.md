@@ -34,13 +34,25 @@ EXPO_PUBLIC_SUPABASE_KEY=<publishable key>
 
 El schema de la base está en [supabase/schema.sql](supabase/schema.sql) — se pega en el SQL Editor de Supabase y es idempotente (se puede correr más de una vez).
 
+## Base de datos
+
+El schema vive en [supabase/](supabase/) y se corre en el SQL Editor de Supabase:
+
+1. [supabase/schema.sql](supabase/schema.sql) — comercios y precios (base).
+2. [supabase/ratings.sql](supabase/ratings.sql) — puntuaciones de comercios (estrellas).
+
+Ambos son idempotentes (se pueden correr más de una vez).
+
 ## Roadmap
 
 - [x] Fase 1: Limpieza del repo y unificación en una sola versión React Native
 - [x] Fase 2: Backend con Supabase (auth real, DB compartida, multi-usuario)
 - [x] Fase 3a: Geolocalización con `expo-location` — distancia en resultados y orden por cercanía
-- [ ] Fase 3b: Mapa visual con marcadores de comercios
-- [ ] Fase 4: Foto de producto, categorías, filtros, build con EAS
+- [x] Fase 3b: Mapa real con `react-native-maps` (home con comercios y buscador)
+- [x] Rediseño visual: identidad propia (verde + Nunito), tabs Mapa/Buscar/Mi negocio
+- [x] Cuentas de cliente + puntuaciones de comercios (estrellas)
+- [ ] Fase 4: Catálogo de categorías, foto de producto, filtros, build con EAS
+- [ ] Futuro: pedidos/encargos (click & collect)
 
 ## Licencia
 
