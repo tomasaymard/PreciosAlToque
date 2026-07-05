@@ -7,12 +7,15 @@ import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { useApp, Price } from '@/contexts/AppContext';
 import { CATEGORIES } from '@/lib/categories';
+import { PRODUCT_CATEGORIES } from '@/lib/product-categories';
 import { Brand, Type, Radius } from '@/constants/theme';
 
 export default function AdminScreen() {
   const [productName, setProductName] = useState('');
   const [productPrice, setProductPrice] = useState('');
   const [productUnit, setProductUnit] = useState('el kilo');
+  const [productCategory, setProductCategory] = useState<string | null>(null);
+  const [productSubcategory, setProductSubcategory] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
 
@@ -86,10 +89,12 @@ export default function AdminScreen() {
 
     setIsLoading(true);
     try {
-      await upsertPrice(productName, price, productUnit);
+      await upsertPrice(productName, price, productUnit, productCategory, productSubcategory);
       setProductName('');
       setProductPrice('');
       setProductUnit('el kilo');
+      setProductCategory(null);
+      setProductSubcategory(null);
       Alert.alert('Listo', 'Precio cargado o actualizado con éxito.');
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'No se pudo guardar el precio.');
@@ -270,8 +275,70 @@ export default function AdminScreen() {
             </ThemedView>
           </ThemedView>
 
-          <TouchableOpacity 
-            style={[styles.submitButton, isLoading && styles.submitButtonDisabled]} 
+          {/* Categoría del producto (opcional) */}
+          <ThemedView style={styles.formGroup}>
+            <ThemedText style={styles.label}>Categoría (opcional)</ThemedText>
+            <View style={styles.categoryGrid}>
+              {PRODUCT_CATEGORIES.map((c) => {
+                const active = productCategory === c.key;
+                return (
+                  <TouchableOpacity
+                    key={c.key}
+                    style={[styles.categoryChip, active && styles.categoryChipActive]}
+                    onPress={() => {
+                      if (active) {
+                        setProductCategory(null);
+                        setProductSubcategory(null);
+                      } else {
+                        setProductCategory(c.key);
+                        setProductSubcategory(null);
+                      }
+                    }}
+                    disabled={isLoading}
+                  >
+                    <Ionicons
+                      name={c.icon as any}
+                      size={14}
+                      color={active ? '#ffffff' : Brand.textSecondary}
+                    />
+                    <ThemedText style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                      {c.label}
+                    </ThemedText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ThemedView>
+
+          {/* Subcategoría, si la categoría elegida tiene */}
+          {productCategory &&
+            (PRODUCT_CATEGORIES.find((c) => c.key === productCategory)?.subcategories.length ?? 0) > 0 && (
+              <ThemedView style={styles.formGroup}>
+                <ThemedText style={styles.label}>Tipo</ThemedText>
+                <View style={styles.categoryGrid}>
+                  {PRODUCT_CATEGORIES.find((c) => c.key === productCategory)!.subcategories.map((s) => {
+                    const active = productSubcategory === s.key;
+                    return (
+                      <TouchableOpacity
+                        key={s.key}
+                        style={[styles.categoryChip, active && styles.categoryChipActive]}
+                        onPress={() => setProductSubcategory(active ? null : s.key)}
+                        disabled={isLoading}
+                      >
+                        <ThemedText
+                          style={[styles.categoryChipText, active && styles.categoryChipTextActive]}
+                        >
+                          {s.label}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ThemedView>
+            )}
+
+          <TouchableOpacity
+            style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
             onPress={handleSubmit}
             disabled={isLoading}
           >

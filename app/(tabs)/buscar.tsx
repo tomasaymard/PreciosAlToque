@@ -19,6 +19,11 @@ import { Link } from 'expo-router';
 import { useApp, PriceWithBusiness, SortBy, BusinessRating } from '@/contexts/AppContext';
 import { Brand, Type, Radius, Spacing } from '@/constants/theme';
 import { formatDistance } from '@/lib/geo';
+import {
+  PRODUCT_CATEGORIES,
+  productCategoryLabel,
+  productSubcategoryLabel,
+} from '@/lib/product-categories';
 import { StarRating } from '@/components/star-rating';
 
 interface PriceCardProps {
@@ -62,6 +67,16 @@ const PriceCard: React.FC<PriceCardProps> = ({ item, isBestPrice, rating }) => (
       </Text>
       <Text style={styles.cardMeta}>{item.unit}</Text>
     </View>
+    {item.category && (
+      <View style={styles.categoryTag}>
+        <Text style={styles.categoryTagText}>
+          {productCategoryLabel(item.category)}
+          {productSubcategoryLabel(item.category, item.subcategory)
+            ? ` · ${productSubcategoryLabel(item.category, item.subcategory)}`
+            : ''}
+        </Text>
+      </View>
+    )}
     <View style={styles.cardFooter}>
       <StarRating value={rating.average} count={rating.count} size={13} />
       <View style={styles.cardFooterRight}>
@@ -86,15 +101,25 @@ export default function SearchScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('price');
   const [radius, setRadius] = useState<number | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const { searchPrices, refresh, loading, userLocation, requestLocation, getBusinessRating } = useApp();
 
   // Resultados visibles según el radio elegido. Los que no tienen distancia
   // (comercio sin coordenadas o sin permiso de ubicación) solo se muestran
   // cuando el radio es "Todos".
-  const visibleResults =
+  const withinRadius =
     radius == null
       ? results
       : results.filter((r) => r.distance != null && r.distance <= radius);
+
+  const visibleResults = categoryFilter
+    ? withinRadius.filter((r) => r.category === categoryFilter)
+    : withinRadius;
+
+  // Categorías presentes en los resultados actuales (para los chips de filtro)
+  const resultCategories = PRODUCT_CATEGORIES.filter((c) =>
+    results.some((r) => r.category === c.key)
+  );
 
   const handleSearch = (overrideSort?: SortBy) => {
     if (!searchTerm.trim()) {
@@ -221,6 +246,33 @@ export default function SearchScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Categoría (solo si los resultados traen categorías) */}
+        {resultCategories.length > 0 && (
+          <View style={[styles.sortRow, { flexWrap: 'wrap' }]}>
+            <Text style={styles.sortLabel}>Categoría:</Text>
+            <TouchableOpacity
+              style={[styles.chip, categoryFilter === null && styles.chipActive]}
+              onPress={() => setCategoryFilter(null)}
+            >
+              <Text style={[styles.chipText, categoryFilter === null && styles.chipTextActive]}>
+                Todas
+              </Text>
+            </TouchableOpacity>
+            {resultCategories.map((c) => {
+              const active = categoryFilter === c.key;
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setCategoryFilter(active ? null : c.key)}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </View>
 
       {/* Resultados */}
@@ -246,11 +298,11 @@ export default function SearchScreen() {
               />
             ))}
           </View>
-        ) : results.length > 0 && radius != null ? (
+        ) : results.length > 0 ? (
           <View style={styles.placeholder}>
             <Text style={styles.placeholderText}>
-              Hay precios para “{searchTerm}”, pero ninguno a menos de{' '}
-              {radius >= 1000 ? `${radius / 1000} km` : `${radius} m`}. Probá ampliando el radio.
+              Hay precios para “{searchTerm}”, pero ninguno pasa los filtros elegidos
+              (radio o categoría). Probá ampliarlos.
             </Text>
           </View>
         ) : searchTerm ? (
@@ -440,6 +492,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Brand.textSecondary,
     marginTop: 2,
+  },
+  categoryTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: Brand.primaryFaint,
+    borderRadius: Radius.sm,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginTop: Spacing.sm,
+  },
+  categoryTagText: {
+    fontFamily: Type.regular,
+    fontSize: 11,
+    color: Brand.primaryDark,
   },
   cardFooter: {
     flexDirection: 'row',

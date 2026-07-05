@@ -37,6 +37,8 @@ export interface Price {
   product_name: string;
   price: number;
   unit: string;
+  category: string | null;
+  subcategory: string | null;
   updated_at: string;
 }
 
@@ -98,7 +100,13 @@ interface AppContextType {
   signOut: () => Promise<void>;
 
   // CRUD de precios (solo el dueño del negocio puede; lo enforzan las RLS)
-  upsertPrice: (productName: string, price: number, unit: string) => Promise<void>;
+  upsertPrice: (
+    productName: string,
+    price: number,
+    unit: string,
+    category?: string | null,
+    subcategory?: string | null
+  ) => Promise<void>;
   deletePrice: (priceId: string) => Promise<void>;
   /** Fija/actualiza la ubicación del comercio del usuario logueado */
   updateMyBusinessLocation: (coords: Coords) => Promise<void>;
@@ -335,7 +343,9 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const upsertPrice = async (
     productName: string,
     price: number,
-    unit: string
+    unit: string,
+    category?: string | null,
+    subcategory?: string | null
   ): Promise<void> => {
     if (!myBusiness) {
       throw new Error('No tenés un negocio asociado a tu cuenta.');
@@ -344,17 +354,28 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     // El trigger en la DB normaliza product_name a minúsculas y trim.
     // El unique index (business_id, product_name) hace que el upsert
     // reemplace si ya hay un precio para ese producto en este negocio.
-    const { error } = await supabase
+    const payload = {
+      business_id: myBusiness.id,
+      product_name: productName,
+      price,
+      unit,
+      category: category ?? null,
+      subcategory: subcategory ?? null,
+    };
+
+    let { error } = await supabase
       .from('prices')
-      .upsert(
-        {
-          business_id: myBusiness.id,
-          product_name: productName,
-          price,
-          unit,
-        },
-        { onConflict: 'business_id,product_name' }
-      );
+      .upsert(payload, { onConflict: 'business_id,product_name' });
+
+    // Tolerancia: si la DB todavía no tiene las columnas de categoría (no
+    // corrieron product_categories.sql), reintentamos sin ellas para no
+    // bloquear la carga de precios.
+    if (error && /category/i.test(error.message) && /column|schema/i.test(error.message)) {
+      const { category: _c, subcategory: _s, ...withoutCategories } = payload;
+      ({ error } = await supabase
+        .from('prices')
+        .upsert(withoutCategories, { onConflict: 'business_id,product_name' }));
+    }
 
     if (error) {
       throw new Error(error.message);

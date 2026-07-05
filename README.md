@@ -41,6 +41,7 @@ El schema vive en [supabase/](supabase/) y se corre en el SQL Editor de Supabase
 1. [supabase/schema.sql](supabase/schema.sql) — comercios y precios (base).
 2. [supabase/ratings.sql](supabase/ratings.sql) — puntuaciones de comercios (estrellas).
 3. [supabase/business_category.sql](supabase/business_category.sql) — rubro del comercio.
+4. [supabase/product_categories.sql](supabase/product_categories.sql) — categorías de productos.
 
 Todos son idempotentes (se pueden correr más de una vez).
 
