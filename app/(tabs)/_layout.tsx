@@ -7,11 +7,13 @@ import { Brand, Type } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 
 export default function TabLayout() {
-  // La pestaña "Mi negocio" es solo para comerciantes: aparece únicamente
-  // cuando hay sesión iniciada. Los clientes no tienen cuenta (por ahora),
-  // así que para ellos la app es Mapa + Buscar. El comerciante entra la
+  // La última pestaña aparece solo con sesión iniciada, y se adapta:
+  // - Comerciante (tiene comercio): "Mi negocio" (ícono de local).
+  // - Cliente (sin comercio): "Mi cuenta" (ícono de persona).
+  // Sin sesión, la pestaña se oculta (href: null); el comerciante entra la
   // primera vez por el link "¿Tenés un comercio?" de la pantalla Buscar.
-  const { session } = useApp();
+  const { session, myBusiness } = useApp();
+  const isMerchant = !!myBusiness;
 
   return (
     <Tabs
@@ -40,8 +42,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="mi-negocio"
         options={{
-          title: 'Mi negocio',
-          tabBarIcon: ({ color }) => <Ionicons size={24} name="storefront-outline" color={color} />,
+          title: isMerchant ? 'Mi negocio' : 'Mi cuenta',
+          tabBarIcon: ({ color }) => (
+            <Ionicons
+              size={24}
+              name={isMerchant ? 'storefront-outline' : 'person-outline'}
+              color={color}
+            />
+          ),
           // href: null saca la pestaña de la barra (la ruta sigue existiendo)
           href: session ? undefined : null,
         }}

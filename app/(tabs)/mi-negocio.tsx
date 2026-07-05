@@ -1,10 +1,11 @@
-// Pestaña "Mi negocio": la puerta de entrada de los comerciantes.
-// - Logueado con negocio: resumen + botón al panel de administración.
-// - No logueado: invitación a ingresar o registrar el comercio.
+// Pestaña "Mi negocio" / "Mi cuenta": área de la cuenta del usuario logueado.
+// - Comerciante (tiene comercio): resumen + acceso al panel + logout.
+// - Cliente (sin comercio): su cuenta + logout + invitación a sumar un comercio.
+// - No logueado: invitación a registrarse o ingresar.
 // Reemplaza al viejo link "Acceso Negocios" escondido en el footer.
 
 import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
@@ -12,11 +13,26 @@ import { useApp } from '@/contexts/AppContext';
 import { Brand, Type, Radius, Spacing } from '@/constants/theme';
 
 export default function MyBusinessScreen() {
-  const { session, myBusiness, prices, authUser } = useApp();
+  const { session, myBusiness, prices, authUser, signOut } = useApp();
 
   const myPricesCount = myBusiness
     ? prices.filter((p) => p.business_id === myBusiness.id).length
     : 0;
+
+  const handleLogout = () => {
+    Alert.alert('Cerrar sesión', '¿Querés cerrar tu sesión?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar sesión',
+        onPress: async () => {
+          await signOut();
+          // Esta pestaña se oculta al cerrar sesión; vamos al mapa para no
+          // quedar en una pantalla que desaparece.
+          router.replace('/(tabs)');
+        },
+      },
+    ]);
+  };
 
   if (session && myBusiness) {
     return (
@@ -37,22 +53,33 @@ export default function MyBusinessScreen() {
             <Ionicons name="pricetags-outline" size={18} color="#ffffff" />
             <Text style={styles.primaryButtonText}>Administrar mis precios</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>Cerrar sesión</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     );
   }
 
   if (session && !myBusiness) {
+    // Cliente (vecino): su cuenta. Puede puntuar comercios y, más adelante,
+    // encargar productos. Desde acá cierra sesión o suma un comercio propio.
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.title}>Tu cuenta no tiene un comercio</Text>
-          <Text style={styles.subtitle}>
-            Estás logueado como {authUser?.email}, pero no encontramos un comercio asociado.
-            Entrá al panel para más detalles.
+          <View style={styles.businessIcon}>
+            <Ionicons name="person-outline" size={26} color="#ffffff" />
+          </View>
+          <Text style={styles.businessName}>Mi cuenta</Text>
+          <Text style={styles.businessMeta}>{authUser?.email}</Text>
+          <Text style={[styles.subtitle, { marginTop: Spacing.lg, marginBottom: Spacing.lg }]}>
+            Con tu cuenta podés puntuar los comercios que visitás. ¡Gracias por sumarte!
           </Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/admin')}>
-            <Text style={styles.primaryButtonText}>Ir al panel</Text>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/signup')}>
+            <Text style={styles.secondaryButtonText}>También tengo un comercio</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>Cerrar sesión</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -186,5 +213,17 @@ const styles = StyleSheet.create({
     fontFamily: Type.semibold,
     fontSize: 14,
     color: Brand.primary,
+  },
+  logoutButton: {
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    fontFamily: Type.regular,
+    fontSize: 13.5,
+    color: Brand.textMuted,
+    textDecorationLine: 'underline',
   },
 });
