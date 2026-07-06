@@ -183,40 +183,21 @@ export default function MapHomeScreen() {
         toolbarEnabled={false}
         onPress={() => setSelected(null)}
       >
-        {businessesWithCoords.map((b) => {
-          // Android (y en especial la arquitectura nueva de RN) mide mal las
-          // vistas custom dentro de un Marker y recorta el texto. Defensa en
-          // capas: ancho Y alto explícitos, collapsable={false} para que
-          // Android no "aplane" la vista, y allowFontScaling={false} para que
-          // el tamaño de letra del sistema no desborde el ancho calculado.
-          const label =
-            b.name.length > 18 ? b.name.slice(0, 17).trimEnd() + '…' : b.name;
-          const pillWidth = Math.min(Math.max(Math.ceil(label.length * 8) + 28, 70), 185);
-          return (
-            <Marker
-              key={b.id}
-              coordinate={{ latitude: b.lat!, longitude: b.lon! }}
-              anchor={{ x: 0.5, y: 0.5 }}
-              onPress={(e) => {
-                e.stopPropagation();
-                focusBusiness(b);
-              }}
-            >
-              <View
-                collapsable={false}
-                style={[
-                  styles.markerPill,
-                  { width: pillWidth, height: 28 },
-                  selected?.id === b.id && styles.markerPillSelected,
-                ]}
-              >
-                <Text style={styles.markerText} allowFontScaling={false} numberOfLines={1}>
-                  {label}
-                </Text>
-              </View>
-            </Marker>
-          );
-        })}
+        {businessesWithCoords.map((b) => (
+          // Marcadores estándar del mapa (plan B definitivo): los custom con
+          // texto se recortan por un bug de react-native-maps con la
+          // arquitectura nueva de RN. El pin nativo lo dibuja Google y es
+          // 100% confiable; el nombre se ve al tocarlo, en el panel inferior.
+          <Marker
+            key={b.id}
+            coordinate={{ latitude: b.lat!, longitude: b.lon! }}
+            pinColor={selected?.id === b.id ? Brand.accent : Brand.primary}
+            onPress={(e) => {
+              e.stopPropagation();
+              focusBusiness(b);
+            }}
+          />
+        ))}
       </MapView>
 
       {/* Buscador flotante */}
@@ -441,27 +422,6 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: '#ffffff',
-  },
-  markerPill: {
-    backgroundColor: Brand.primary,
-    borderRadius: Radius.sm + 2,
-    borderWidth: 1.5,
-    borderColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerPillSelected: {
-    backgroundColor: Brand.primaryDark,
-    borderColor: Brand.accent,
-  },
-  markerText: {
-    // Letra del sistema a propósito: Android convierte el marcador en imagen
-    // apenas se crea, antes de que Nunito cargue — con fuente custom el texto
-    // sale vacío. La del sistema está disponible al instante.
-    fontWeight: '700',
-    fontSize: 12,
-    color: '#ffffff',
-    textAlign: 'center',
   },
   locateFab: {
     position: 'absolute',
