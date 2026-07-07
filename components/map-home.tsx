@@ -342,6 +342,11 @@ export default function MapHomeScreen() {
                       {item.business.address || 'Sin dirección'}
                       {item.distance != null ? ` · a ${formatDistance(item.distance)}` : ''}
                     </Text>
+                    <StarRating
+                      value={getBusinessRating(item.business.id).average}
+                      count={getBusinessRating(item.business.id).count}
+                      size={12}
+                    />
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={Brand.textMuted} />
                 </TouchableOpacity>

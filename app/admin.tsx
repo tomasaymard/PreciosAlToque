@@ -7,7 +7,11 @@ import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { useApp, Price } from '@/contexts/AppContext';
 import { CATEGORIES } from '@/lib/categories';
-import { PRODUCT_CATEGORIES } from '@/lib/product-categories';
+import {
+  PRODUCT_CATEGORIES,
+  productCategoryLabel,
+  productSubcategoryLabel,
+} from '@/lib/product-categories';
 import { Brand, Type, Radius } from '@/constants/theme';
 
 export default function AdminScreen() {
@@ -360,6 +364,14 @@ export default function AdminScreen() {
                     <ThemedText style={styles.productPriceText}>
                       ${price.price.toLocaleString('es-AR')} {price.unit}
                     </ThemedText>
+                    {price.category && (
+                      <ThemedText style={styles.productCategory}>
+                        {productCategoryLabel(price.category)}
+                        {productSubcategoryLabel(price.category, price.subcategory)
+                          ? ` · ${productSubcategoryLabel(price.category, price.subcategory)}`
+                          : ''}
+                      </ThemedText>
+                    )}
                     <ThemedText style={styles.productUpdated}>
                       Actualizado: {new Date(price.updated_at).toLocaleString('es-AR')}
                     </ThemedText>
@@ -569,6 +581,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Brand.primary,
     fontWeight: 'bold',
+  },
+  productCategory: {
+    fontSize: 12,
+    color: Brand.primaryDark,
   },
   productUpdated: {
     fontSize: 12,

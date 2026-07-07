@@ -11,6 +11,7 @@
 // y expone su estado con el hook useApp().
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { AppState } from 'react-native';
 import { Session, User as AuthUser } from '@supabase/supabase-js';
 import * as Location from 'expo-location';
 import { supabase } from '@/lib/supabase';
@@ -193,6 +194,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   // Carga inicial de datos
   useEffect(() => {
     refresh().finally(() => setLoading(false));
+  }, [refresh]);
+
+  // Recargar datos cuando la app vuelve del fondo: si un comerciante cambió
+  // un precio mientras tanto, el vecino lo ve sin tener que refrescar a mano.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refresh();
+      }
+    });
+    return () => sub.remove();
   }, [refresh]);
 
   // Sincronización con el estado de auth de Supabase
