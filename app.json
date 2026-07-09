@@ -13,6 +13,11 @@
     },
     "android": {
       "package": "com.tomasaymard.preciosaltoque",
+      "config": {
+        "googleMaps": {
+          "apiKey": "REEMPLAZAR_CON_LA_API_KEY_DE_GOOGLE_MAPS_ANTES_DEL_BUILD"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
