@@ -1,32 +1,62 @@
 # Despertador de Supabase.
 #
-# El plan gratuito de Supabase pausa el proyecto después de ~1 semana sin
-# actividad (ya nos pasó una vez y la app quedó muerta hasta restaurarlo a
-# mano). Este workflow hace una consulta mínima a la API dos veces por semana
-# para que el proyecto nunca quede inactivo.
+# El plan gratuito pausa el proyecto tras ~7 días sin actividad. La primera
+# versión de este workflow hacía un SELECT por la API y NO alcanzó: el
+# proyecto se pausó igual el 2026-07-14 aunque las corridas daban 200.
+# Supabase no cuenta las lecturas como actividad suficiente.
 #
-# La clave usada es la "publishable" (pública por diseño — es la misma que va
+# Ahora hace una ESCRITURA real (UPDATE sobre la tabla heartbeat, ver
+# supabase/heartbeat.sql) y verifica que la fila realmente se haya
+# actualizado — si el UPDATE no impacta ninguna fila, el job falla y aparece
+# en las notificaciones de GitHub.
+#
+# La clave usada es la "publishable" (pública por diseño — la misma que va
 # dentro de la app), así que no hay secreto que proteger acá.
 
 name: Mantener Supabase despierto
 
 on:
   schedule:
-    # Lunes y jueves a las 12:00 UTC (9:00 en Argentina)
-    - cron: '0 12 * * 1,4'
+    # Lunes, miércoles y viernes a las 12:00 UTC (9:00 en Argentina).
+    # Tres veces por semana da margen si una corrida falla.
+    - cron: '0 12 * * 1,3,5'
   workflow_dispatch: {}
 
 jobs:
-  ping:
+  heartbeat:
     runs-on: ubuntu-latest
     steps:
-      - name: Consulta mínima a la API
+      - name: Escribir latido en la base
+        env:
+          SUPABASE_URL: https://prhplqidmqdbkvpcimnf.supabase.co
+          SUPABASE_KEY: sb_publishable_Z_YSrufE3UMuJkCUh8Q0_g_AQFhIPOQ
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://prhplqidmqdbkvpcimnf.supabase.co/rest/v1/businesses?select=id&limit=1" \
-            -H "apikey: sb_publishable_Z_YSrufE3UMuJkCUh8Q0_g_AQFhIPOQ")
-          echo "Respuesta HTTP: $code"
-          if [ "$code" != "200" ]; then
-            echo "::error::Supabase no respondió 200 — puede estar pausado o caído."
+          set -euo pipefail
+
+          respuesta=$(curl -s -w '\n%{http_code}' \
+            -X PATCH "${SUPABASE_URL}/rest/v1/heartbeat?id=eq.1" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=representation" \
+            -d "{\"beat_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+
+          cuerpo=$(echo "$respuesta" | sed '$d')
+          codigo=$(echo "$respuesta" | tail -n1)
+
+          echo "HTTP $codigo"
+          echo "Respuesta: $cuerpo"
+
+          if [ "$codigo" != "200" ]; then
+            echo "::error::Supabase respondió $codigo — el proyecto puede estar pausado o caído."
             exit 1
           fi
+
+          # return=representation devuelve la fila actualizada; si viene vacía,
+          # el UPDATE no impactó nada (tabla ausente o policy bloqueando).
+          if [ "$cuerpo" = "[]" ] || [ -z "$cuerpo" ]; then
+            echo "::error::El UPDATE no modificó ninguna fila. ¿Corrieron supabase/heartbeat.sql?"
+            exit 1
+          fi
+
+          echo "Latido escrito correctamente."

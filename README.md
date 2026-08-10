@@ -42,8 +42,19 @@ El schema vive en [supabase/](supabase/) y se corre en el SQL Editor de Supabase
 2. [supabase/ratings.sql](supabase/ratings.sql) — puntuaciones de comercios (estrellas).
 3. [supabase/business_category.sql](supabase/business_category.sql) — rubro del comercio.
 4. [supabase/product_categories.sql](supabase/product_categories.sql) — categorías de productos.
+5. [supabase/heartbeat.sql](supabase/heartbeat.sql) — tabla de latido para el keepalive.
 
 Todos son idempotentes (se pueden correr más de una vez).
+
+## Nota sobre el plan gratuito de Supabase
+
+El proyecto se pausa solo tras ~7 días sin actividad, y **las lecturas no
+cuentan**: hay que escribir. Por eso existe la tabla `heartbeat` y el workflow
+[supabase-keepalive.yml](.github/workflows/supabase-keepalive.yml), que hace un
+UPDATE tres veces por semana. Si el proyecto igual aparece pausado, se restaura
+desde el dashboard (los datos se conservan 90 días). Con usuarios reales
+cargando precios, la actividad propia de la app alcanza para mantenerlo
+despierto; el plan Pro elimina el problema por completo.
 
 ## Compilar el APK (Android)
 
