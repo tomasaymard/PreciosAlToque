@@ -55,8 +55,18 @@ export function buildMapHtml(center: { lat: number; lon: number }, zoom = 14): s
 </head>
 <body>
   <div id="map"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          onerror="window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({type:'error',reason:'leaflet'}))"></script>
   <script>
+    // Si Leaflet no cargó (sin internet o CDN caído), avisamos a la app en vez
+    // de dejar la pantalla en blanco sin explicación.
+    if (typeof L === 'undefined') {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', reason: 'leaflet' }));
+      }
+      throw new Error('Leaflet no disponible');
+    }
+
     var map = L.map('map', { zoomControl: false, attributionControl: true })
       .setView([${center.lat}, ${center.lon}], ${zoom});
 

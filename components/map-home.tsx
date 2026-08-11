@@ -31,7 +31,12 @@ import { buildMapHtml, DEFAULT_CENTER } from '@/lib/leaflet-map';
 export default function MapHomeScreen() {
   const insets = useSafeAreaInsets();
   const webRef = useRef<WebView>(null);
-  const [mapReady, setMapReady] = useState(false);
+  // `readyTick` sube cada vez que el mapa avisa que terminó de cargar. Sirve
+  // como disparador de los efectos que le mandan datos: si el WebView se
+  // recargara por cualquier motivo, los pines se vuelven a enviar solos.
+  const [readyTick, setReadyTick] = useState(0);
+  const mapReady = readyTick > 0;
+  const [mapError, setMapError] = useState(false);
   const didFitRef = useRef(false);
 
   const {
@@ -141,7 +146,11 @@ export default function MapHomeScreen() {
     try {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type === 'ready') {
-        setMapReady(true);
+        setMapError(false);
+        setReadyTick((n) => n + 1);
+      } else if (msg.type === 'error') {
+        // Leaflet no cargó (sin internet, o el CDN no respondió)
+        setMapError(true);
       } else if (msg.type === 'markerPress') {
         const b = businesses.find((x) => x.id === msg.id);
         if (b) focusBusiness(b);
@@ -163,18 +172,26 @@ export default function MapHomeScreen() {
       name: b.name,
     }));
     runInMap(`window.PAT.setMarkers(${JSON.stringify(data)})`);
-  }, [mapReady, businessesWithCoords, runInMap]);
+  }, [mapReady, readyTick, businessesWithCoords, runInMap]);
 
   // Sincronizar el punto de "vos estás acá"
   useEffect(() => {
     if (!mapReady || !userLocation) return;
     runInMap(`window.PAT.setUserLocation(${userLocation.lat}, ${userLocation.lon})`);
-  }, [mapReady, userLocation, runInMap]);
+  }, [mapReady, readyTick, userLocation, runInMap]);
 
   // Encuadre inicial: que entren el usuario y los comercios más cercanos.
   // Una sola vez, para no pelear con el usuario mientras navega el mapa.
   useEffect(() => {
-    if (!mapReady || didFitRef.current || businessesWithCoords.length === 0) return;
+    if (!mapReady || didFitRef.current) return;
+
+    // Todavía no hay comercios con coordenadas: al menos centrar en el usuario,
+    // así el mapa no queda parado en el Obelisco. No marcamos el encuadre como
+    // hecho, para que se reajuste cuando lleguen los comercios.
+    if (businessesWithCoords.length === 0) {
+      if (userLocation) runInMap(`window.PAT.centerOn(${userLocation.lat}, ${userLocation.lon}, 15)`);
+      return;
+    }
 
     const nearest = [...businessesWithCoords]
       .sort((a, b) => {
@@ -193,11 +210,17 @@ export default function MapHomeScreen() {
       didFitRef.current = true;
     }, 400);
     return () => clearTimeout(timer);
-  }, [mapReady, businessesWithCoords, userLocation, runInMap]);
+  }, [mapReady, readyTick, businessesWithCoords, userLocation, runInMap]);
 
-  const initialCenter = userLocation
-    ? { lat: userLocation.lat, lon: userLocation.lon }
-    : DEFAULT_CENTER;
+  // ⚠️ IMPORTANTE: el HTML del mapa se calcula UNA SOLA VEZ. Si se recalculara
+  // en cada render (por ejemplo al llegar la ubicación), el WebView recargaría
+  // la página entera y se perderían todos los pines. El recentrado posterior
+  // se hace inyectando JavaScript (centerOn / fitTo), no rehaciendo el HTML.
+  const initialHtml = useMemo(
+    () => buildMapHtml(userLocation ? { lat: userLocation.lat, lon: userLocation.lon } : DEFAULT_CENTER),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   return (
     <View style={styles.container}>
@@ -205,8 +228,11 @@ export default function MapHomeScreen() {
         ref={webRef}
         style={StyleSheet.absoluteFill}
         originWhitelist={['*']}
-        source={{ html: buildMapHtml(initialCenter) }}
+        // baseUrl le da al HTML un origen https real. Sin esto, en Android el
+        // WebView puede bloquear la descarga de Leaflet desde el CDN.
+        source={{ html: initialHtml, baseUrl: 'https://tile.openstreetmap.org/' }}
         onMessage={handleMessage}
+        onError={() => setMapError(true)}
         javaScriptEnabled
         domStorageEnabled
         scrollEnabled={false}
@@ -214,6 +240,17 @@ export default function MapHomeScreen() {
         setSupportMultipleWindows={false}
         androidLayerType="hardware"
       />
+
+      {/* Aviso si el mapa no pudo cargar (sin internet, CDN caído). El resto de
+          la pantalla sigue funcionando: el panel "Cerca tuyo" no depende del mapa. */}
+      {mapError && (
+        <View style={styles.mapErrorBox}>
+          <Ionicons name="cloud-offline-outline" size={20} color={Brand.textSecondary} />
+          <Text style={styles.mapErrorText}>
+            No se pudo cargar el mapa. Revisá tu conexión a internet.
+          </Text>
+        </View>
+      )}
 
       {/* Buscador flotante */}
       <TouchableOpacity
@@ -442,6 +479,25 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: '#ffffff',
+  },
+  mapErrorBox: {
+    position: 'absolute',
+    top: '40%',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    elevation: 4,
+  },
+  mapErrorText: {
+    flex: 1,
+    fontFamily: Type.regular,
+    fontSize: 13,
+    color: Brand.textSecondary,
   },
   locateFab: {
     position: 'absolute',
