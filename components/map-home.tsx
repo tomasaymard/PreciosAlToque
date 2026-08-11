@@ -1,16 +1,22 @@
 // Home de la app: el mapa. (Solo Android/iOS — la versión web liviana está
-// en index.web.tsx, porque react-native-maps no funciona en navegador.)
+// en map-home.web.tsx.)
 //
-// - Mapa centrado en el usuario (o en CABA si no hay permiso todavía)
-// - Cada comercio con coordenadas aparece como una burbuja verde con su nombre
+// El mapa es Leaflet + OpenStreetMap dentro de un WebView. Se eligió así
+// porque no requiere clave de API, cuenta de Google ni tarjeta de crédito
+// (react-native-maps obliga a una clave de Google Maps en Android).
+// El HTML del mapa vive en lib/leaflet-map.ts.
+//
+// - Mapa centrado en el usuario (o en el Obelisco si todavía no hay permiso)
+// - Cada comercio con coordenadas es un pin verde (naranja el seleccionado)
 // - Buscador flotante arriba (navega a la pestaña Buscar)
+// - Chips para filtrar por rubro
 // - Botón para centrar el mapa en tu ubicación
-// - Panel inferior "Cerca tuyo": comercios ordenados por distancia; al tocar
-//   uno (en el panel o en el mapa) se ven sus productos y precios
+// - Panel inferior "Cerca tuyo": comercios por distancia; al tocar uno (en el
+//   panel o en el mapa) se ven sus productos, precios y puntuación
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, FlatList, Alert, ScrollView } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,18 +26,14 @@ import { Brand, Type, Radius, Spacing } from '@/constants/theme';
 import { distanceInMeters, formatDistance } from '@/lib/geo';
 import { CATEGORIES, categoryLabel } from '@/lib/categories';
 import { StarRating } from '@/components/star-rating';
-
-// Centro por defecto cuando no tenemos la ubicación del usuario (Obelisco, CABA)
-const DEFAULT_REGION = {
-  latitude: -34.6037,
-  longitude: -58.3816,
-  latitudeDelta: 0.03,
-  longitudeDelta: 0.03,
-};
+import { buildMapHtml, DEFAULT_CENTER } from '@/lib/leaflet-map';
 
 export default function MapHomeScreen() {
   const insets = useSafeAreaInsets();
-  const mapRef = useRef<MapView>(null);
+  const webRef = useRef<WebView>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const didFitRef = useRef(false);
+
   const {
     businesses,
     prices,
@@ -43,6 +45,13 @@ export default function MapHomeScreen() {
     isMyBusiness,
   } = useApp();
   const [selected, setSelected] = useState<Business | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+
+  // Ejecuta código dentro del mapa (el WebView). El `true;` final evita un
+  // warning de react-native-webview en iOS.
+  const runInMap = useCallback((js: string) => {
+    webRef.current?.injectJavaScript(`${js}; true;`);
+  }, []);
 
   const handleRate = async (businessId: string, stars: number) => {
     if (!session) {
@@ -63,10 +72,6 @@ export default function MapHomeScreen() {
     }
   };
 
-  // Rubro seleccionado para filtrar (null = todos)
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-
-  // Comercios que pasan el filtro de rubro
   const filteredBusinesses = useMemo(
     () =>
       categoryFilter
@@ -80,13 +85,11 @@ export default function MapHomeScreen() {
     [filteredBusinesses]
   );
 
-  // Rubros que efectivamente tienen algún comercio (para no mostrar chips vacíos)
   const availableCategories = useMemo(() => {
     const keys = new Set(businesses.map((b) => b.category).filter(Boolean) as string[]);
     return CATEGORIES.filter((c) => keys.has(c.key));
   }, [businesses]);
 
-  // Comercios ordenados por cercanía (los sin coordenadas van al final)
   const nearby = useMemo(() => {
     const withDistance = filteredBusinesses.map((b) => ({
       business: b,
@@ -110,12 +113,15 @@ export default function MapHomeScreen() {
 
   const focusBusiness = (b: Business) => {
     setSelected(b);
+    runInMap(`window.PAT.setSelected(${JSON.stringify(b.id)})`);
     if (b.lat != null && b.lon != null) {
-      mapRef.current?.animateToRegion(
-        { latitude: b.lat, longitude: b.lon, latitudeDelta: 0.01, longitudeDelta: 0.01 },
-        400
-      );
+      runInMap(`window.PAT.centerOn(${b.lat}, ${b.lon}, 16)`);
     }
+  };
+
+  const clearSelection = () => {
+    setSelected(null);
+    runInMap('window.PAT.setSelected(null)');
   };
 
   const centerOnMe = async () => {
@@ -127,25 +133,49 @@ export default function MapHomeScreen() {
       );
       return;
     }
-    mapRef.current?.animateToRegion(
-      { latitude: coords.lat, longitude: coords.lon, latitudeDelta: 0.02, longitudeDelta: 0.02 },
-      400
-    );
+    runInMap(`window.PAT.centerOn(${coords.lat}, ${coords.lon}, 16)`);
   };
 
-  const initialRegion = userLocation
-    ? { latitude: userLocation.lat, longitude: userLocation.lon, latitudeDelta: 0.02, longitudeDelta: 0.02 }
-    : DEFAULT_REGION;
+  // Mensajes que llegan desde el mapa
+  const handleMessage = (event: WebViewMessageEvent) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === 'ready') {
+        setMapReady(true);
+      } else if (msg.type === 'markerPress') {
+        const b = businesses.find((x) => x.id === msg.id);
+        if (b) focusBusiness(b);
+      } else if (msg.type === 'mapPress') {
+        clearSelection();
+      }
+    } catch {
+      // mensaje no reconocido: lo ignoramos
+    }
+  };
 
-  // Ajuste inicial del encuadre: cuando ya tenemos comercios con coordenadas,
-  // acomodamos el zoom para que entren el usuario y los comercios más cercanos.
-  // Sin esto, si los comercios quedan fuera del radio inicial el mapa se ve
-  // vacío y parece que no hay nada cargado.
-  const didFitRef = useRef(false);
+  // Sincronizar los pines cuando cambian los comercios o el filtro
   useEffect(() => {
-    if (didFitRef.current || businessesWithCoords.length === 0) return;
+    if (!mapReady) return;
+    const data = businessesWithCoords.map((b) => ({
+      id: b.id,
+      lat: b.lat as number,
+      lon: b.lon as number,
+      name: b.name,
+    }));
+    runInMap(`window.PAT.setMarkers(${JSON.stringify(data)})`);
+  }, [mapReady, businessesWithCoords, runInMap]);
 
-    // Hasta 5 comercios más cercanos (o los primeros 5 si no hay ubicación)
+  // Sincronizar el punto de "vos estás acá"
+  useEffect(() => {
+    if (!mapReady || !userLocation) return;
+    runInMap(`window.PAT.setUserLocation(${userLocation.lat}, ${userLocation.lon})`);
+  }, [mapReady, userLocation, runInMap]);
+
+  // Encuadre inicial: que entren el usuario y los comercios más cercanos.
+  // Una sola vez, para no pelear con el usuario mientras navega el mapa.
+  useEffect(() => {
+    if (!mapReady || didFitRef.current || businessesWithCoords.length === 0) return;
+
     const nearest = [...businessesWithCoords]
       .sort((a, b) => {
         if (!userLocation) return 0;
@@ -154,51 +184,36 @@ export default function MapHomeScreen() {
         return da - db;
       })
       .slice(0, 5)
-      .map((b) => ({ latitude: b.lat!, longitude: b.lon! }));
+      .map((b) => ({ lat: b.lat as number, lon: b.lon as number }));
 
-    const coords = userLocation
-      ? [{ latitude: userLocation.lat, longitude: userLocation.lon }, ...nearest]
-      : nearest;
+    const coords = userLocation ? [{ lat: userLocation.lat, lon: userLocation.lon }, ...nearest] : nearest;
 
-    // Pequeño delay para asegurar que el mapa ya está montado
     const timer = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(coords, {
-        edgePadding: { top: 140, right: 60, bottom: 280, left: 60 },
-        animated: true,
-      });
+      runInMap(`window.PAT.fitTo(${JSON.stringify(coords)})`);
       didFitRef.current = true;
-    }, 600);
-
+    }, 400);
     return () => clearTimeout(timer);
-  }, [businessesWithCoords, userLocation]);
+  }, [mapReady, businessesWithCoords, userLocation, runInMap]);
+
+  const initialCenter = userLocation
+    ? { lat: userLocation.lat, lon: userLocation.lon }
+    : DEFAULT_CENTER;
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
+      <WebView
+        ref={webRef}
         style={StyleSheet.absoluteFill}
-        initialRegion={initialRegion}
-        showsUserLocation
-        showsMyLocationButton={false}
-        toolbarEnabled={false}
-        onPress={() => setSelected(null)}
-      >
-        {businessesWithCoords.map((b) => (
-          // Marcadores estándar del mapa (plan B definitivo): los custom con
-          // texto se recortan por un bug de react-native-maps con la
-          // arquitectura nueva de RN. El pin nativo lo dibuja Google y es
-          // 100% confiable; el nombre se ve al tocarlo, en el panel inferior.
-          <Marker
-            key={b.id}
-            coordinate={{ latitude: b.lat!, longitude: b.lon! }}
-            pinColor={selected?.id === b.id ? Brand.accent : Brand.primary}
-            onPress={(e) => {
-              e.stopPropagation();
-              focusBusiness(b);
-            }}
-          />
-        ))}
-      </MapView>
+        originWhitelist={['*']}
+        source={{ html: buildMapHtml(initialCenter) }}
+        onMessage={handleMessage}
+        javaScriptEnabled
+        domStorageEnabled
+        scrollEnabled={false}
+        bounces={false}
+        setSupportMultipleWindows={false}
+        androidLayerType="hardware"
+      />
 
       {/* Buscador flotante */}
       <TouchableOpacity
@@ -276,7 +291,7 @@ export default function MapHomeScreen() {
                     : ''}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setSelected(null)} accessibilityLabel="Cerrar detalle">
+              <TouchableOpacity onPress={clearSelection} accessibilityLabel="Cerrar detalle">
                 <Ionicons name="close" size={22} color={Brand.textMuted} />
               </TouchableOpacity>
             </View>
